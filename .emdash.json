@@ -1,0 +1,61 @@
+{
+  "$schema": "https://emdash.dev/schema.json",
+  "project": "sabueso",
+  "description": "Sistema multi-agente de investigación periodística — hack@latam 2026",
+  "integrations": {
+    "linear": {
+      "team": "Personal Proyect Hack",
+      "project": "Sabueso v1 · hack@latam 2026"
+    },
+    "github": {
+      "repo": "YOUR_USERNAME/sabueso"
+    }
+  },
+  "worktrees": {
+    "wt-infra": {
+      "description": "GCP, Cloud Run, CI/CD, Dockerfiles",
+      "agent": "claude-code",
+      "paths": ["infra/", ".github/", "apps/*/Dockerfile", "scripts/"],
+      "setup": "echo 'infra worktree ready'",
+      "run": "echo 'no persistent service'",
+      "teardown": "echo 'cleanup done'",
+      "port": "$EMDASH_PORT"
+    },
+    "wt-data": {
+      "description": "Supabase migrations, CocoIndex pipeline, scrapers, tools",
+      "agent": "codex",
+      "paths": ["infra/supabase/", "apps/pipeline/", "apps/worker/src/tools/", "apps/worker/src/scrapers/"],
+      "setup": "cd apps/pipeline && uv sync",
+      "run": "cd apps/pipeline && uv run python -m pytest",
+      "teardown": "echo 'cleanup done'",
+      "port": "$EMDASH_PORT"
+    },
+    "wt-agents": {
+      "description": "LangGraph orchestrator, investigators, LLM client, prompts",
+      "agent": "claude-code",
+      "paths": ["apps/worker/src/orchestrator/", "apps/worker/src/investigators/", "apps/worker/src/llm/", "apps/worker/src/events/", "apps/worker/src/prompts/", "packages/agents-prompts/"],
+      "setup": "cd apps/worker && uv sync",
+      "run": "cd apps/worker && uv run python -m pytest",
+      "teardown": "echo 'cleanup done'",
+      "port": "$EMDASH_PORT"
+    },
+    "wt-api": {
+      "description": "FastAPI service, routes, SSE, auth",
+      "agent": "claude-code",
+      "paths": ["apps/api/"],
+      "setup": "cd apps/api && uv sync",
+      "run": "cd apps/api && uv run uvicorn src.main:app --host 0.0.0.0 --port $EMDASH_PORT --reload",
+      "teardown": "kill $(lsof -ti:$EMDASH_PORT) 2>/dev/null || true",
+      "port": "$EMDASH_PORT"
+    },
+    "wt-frontend": {
+      "description": "Next.js 16, AI Elements, Cinema Mode, cosmos.gl",
+      "agent": "cursor",
+      "paths": ["apps/web/", "packages/ui/", "packages/shared-types/"],
+      "setup": "cd apps/web && pnpm install",
+      "run": "cd apps/web && pnpm dev --port $EMDASH_PORT",
+      "teardown": "kill $(lsof -ti:$EMDASH_PORT) 2>/dev/null || true",
+      "port": "$EMDASH_PORT"
+    }
+  }
+}

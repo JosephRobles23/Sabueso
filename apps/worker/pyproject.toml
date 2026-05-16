@@ -1,0 +1,68 @@
+[project]
+name = "sabueso-worker"
+version = "0.1.0"
+description = "Sabueso investigation worker — LangGraph orchestrator + 7 investigators"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+dependencies = [
+    # Agent orchestration
+    "langgraph>=0.4.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "langchain-core>=0.3.0",
+    "langsmith>=0.2.0",
+
+    # LLM clients (OpenRouter compatible)
+    "openai>=1.60.0",
+    "anthropic>=0.40.0",
+
+    # Scraping
+    "scrapling>=0.2.0",
+    "httpx>=0.28.0",
+
+    # PDF extraction
+    "pymupdf>=1.25.0",
+
+    # Data processing
+    "pydantic>=2.10.0",
+    "asyncpg>=0.30.0",
+    "structlog>=24.4.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+
+    # GCS
+    "google-cloud-storage>=2.19.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+browser = [
+    "playwright>=1.49.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

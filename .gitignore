@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.whl
+.venv/
+venv/
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Turbo
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Docker
+*.log
+
+# GCP
+.gcloudignore
+service-account-key.json
+
+# Supabase
+.supabase/
+
+# Generated
+*.generated.ts
+*.generated.json
+
+# OS
+.DS_Store
+*.swp

@@ -1,8 +1,17 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Download, MoreHorizontal, Share2 } from "lucide-react";
+import {
+  BarChart3,
+  Clock,
+  Download,
+  FileText,
+  MoreHorizontal,
+  Network,
+  Share2,
+} from "lucide-react";
 import type {
   AgentStatus,
   Claim,
@@ -21,10 +30,14 @@ import {
   InvestigationGraph,
   MissionControl,
   OperativesFloor,
+  SankeyView,
   TimelineScrubber,
+  TimelineView,
 } from "@/components/investigation";
 import { useInvestigation, type InvestigationState } from "@/hooks/useInvestigation";
 import { useLocalStorageInvestigation } from "@/hooks/useLocalStorageInvestigation";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { cn } from "@/lib/utils";
 import type {
   ActiveDelegation,
   AgentSnapshot,
@@ -33,6 +46,37 @@ import type {
   GraphEntity,
   GraphSemantic,
 } from "@/lib/mockInvestigationState";
+
+type FloorMode = "graph" | "sankey" | "timeline";
+const FLOOR_MODE_KEY = "sabueso:floor-mode";
+const FLOOR_MODES: Array<{ id: FloorMode; label: string; icon: React.ElementType }> = [
+  { id: "graph", label: "Grafo", icon: Network },
+  { id: "sankey", label: "Flujo $", icon: BarChart3 },
+  { id: "timeline", label: "Cronología", icon: Clock },
+];
+
+function useFloorMode(): [FloorMode, (m: FloorMode) => void] {
+  const [mode, setMode] = React.useState<FloorMode>("graph");
+  // Hydrate from localStorage after mount (avoids SSR mismatch).
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(FLOOR_MODE_KEY);
+    if (stored === "graph" || stored === "sankey" || stored === "timeline") {
+      setMode(stored);
+    }
+  }, []);
+  const update = React.useCallback((next: FloorMode) => {
+    setMode(next);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(FLOOR_MODE_KEY, next);
+      } catch {
+        // ignore — privacy mode / quota
+      }
+    }
+  }, []);
+  return [mode, update];
+}
 
 type Labels = {
   missionControl: string;
@@ -57,9 +101,33 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
 
   const [drillTarget, setDrillTarget] = React.useState<InvestigatorCallsign | null>(null);
   const [scrubTime, setScrubTime] = React.useState<Date | null>(null);
+  const [floorMode, setFloorMode] = useFloorMode();
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   const isLive = !injectedState && state.status === "running";
   const isStreamingDossier = state.status === "synthesizing";
+
+  // When the user clicks an event in TimelineView, switch back to graph mode
+  // and align the scrubber to the claim's timestamp so the graph filters down
+  // to what was known at that point in time.
+  const handleEventClick = React.useCallback(
+    (claimId: string) => {
+      const claim = state.claims.find((c) => c.id === claimId);
+      if (claim) {
+        const t = Date.parse(claim.created_at);
+        if (!Number.isNaN(t)) setScrubTime(new Date(t));
+      }
+      setFloorMode("graph");
+    },
+    [state.claims, setFloorMode],
+  );
+
+  // Double-click on a scrubber dot: snap scrubber to that timestamp. The
+  // graph already filters by `currentTime`, so the visible state matches.
+  const handleEventZoom = React.useCallback((_ev: InvestigationEvent) => {
+    // onTimeChange has already fired from TimelineScrubber (it sets the value
+    // before emitting onEventZoom). Nothing else to do here for now.
+  }, []);
 
   return (
     <main className="flex h-[calc(100dvh-64px)] min-h-0 w-full flex-col bg-[var(--color-canvas)]">
@@ -86,12 +154,15 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
               </Panel>
               <PanelResizeHandle className="w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--color-border-strong)]" />
               <Panel defaultSize={44} minSize={30} className="min-h-0">
-                <InvestigationGraph
+                <FloorPanel
+                  mode={floorMode}
+                  onModeChange={setFloorMode}
                   entities={state.entities}
                   edges={state.edges}
-                  onNodeClick={(_id) => {
-                    /* graph node click → could open entity detail; out of S-12 scope */
-                  }}
+                  claims={state.claims}
+                  scrubTime={scrubTime}
+                  onEventClick={handleEventClick}
+                  prefersReducedMotion={prefersReducedMotion}
                   className="h-full"
                 />
               </Panel>
@@ -109,9 +180,15 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
           {/* Mobile stack */}
           <div className="flex h-full w-full flex-col gap-3 overflow-y-auto lg:hidden">
             <div className="h-[420px] flex-none">
-              <InvestigationGraph
+              <FloorPanel
+                mode={floorMode}
+                onModeChange={setFloorMode}
                 entities={state.entities}
                 edges={state.edges}
+                claims={state.claims}
+                scrubTime={scrubTime}
+                onEventClick={handleEventClick}
+                prefersReducedMotion={prefersReducedMotion}
                 className="h-full"
               />
             </div>
@@ -140,6 +217,7 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
           events={state.events}
           value={scrubTime}
           onTimeChange={setScrubTime}
+          onEventZoom={handleEventZoom}
         />
       </div>
 
@@ -152,6 +230,123 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
         }}
       />
     </main>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Investigation Floor — Grafo / Sankey / Timeline switcher
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface FloorPanelProps {
+  mode: FloorMode;
+  onModeChange: (m: FloorMode) => void;
+  entities: GraphEntity[];
+  edges: GraphEdge[];
+  claims: Claim[];
+  scrubTime: Date | null;
+  onEventClick: (claimId: string) => void;
+  prefersReducedMotion: boolean;
+  className?: string;
+}
+
+function FloorPanel({
+  mode,
+  onModeChange,
+  entities,
+  edges,
+  claims,
+  scrubTime,
+  onEventClick,
+  prefersReducedMotion,
+  className,
+}: FloorPanelProps) {
+  // Render all three at once so React keeps state across switches; the inactive
+  // ones are pointer-events:none with opacity 0. Cross-fade is CSS only — no
+  // framer-motion dependency.
+  const transitionMs = prefersReducedMotion ? 0 : 200;
+
+  return (
+    <div
+      className={cn(
+        "relative flex min-h-0 flex-col rounded-[var(--radius-lg)] bg-transparent",
+        className,
+      )}
+    >
+      <div
+        role="tablist"
+        aria-label="Modos de visualización"
+        className="mb-2 inline-flex w-fit gap-1 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface)] p-0.5"
+      >
+        {FLOOR_MODES.map((m) => {
+          const active = m.id === mode;
+          const Icon = m.icon;
+          return (
+            <button
+              key={m.id}
+              role="tab"
+              type="button"
+              aria-selected={active}
+              aria-controls={`floor-panel-${m.id}`}
+              onClick={() => onModeChange(m.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-surface)]",
+                active
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]",
+              )}
+            >
+              <Icon className="h-3 w-3" aria-hidden />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="relative min-h-0 flex-1">
+        <FloorLayer id="graph" active={mode === "graph"} transitionMs={transitionMs}>
+          <InvestigationGraph
+            entities={entities}
+            edges={edges}
+            currentTime={scrubTime}
+            className="h-full"
+          />
+        </FloorLayer>
+        <FloorLayer id="sankey" active={mode === "sankey"} transitionMs={transitionMs}>
+          <SankeyView entities={entities} edges={edges} className="h-full" />
+        </FloorLayer>
+        <FloorLayer id="timeline" active={mode === "timeline"} transitionMs={transitionMs}>
+          <TimelineView claims={claims} edges={edges} onEventClick={onEventClick} className="h-full" />
+        </FloorLayer>
+      </div>
+    </div>
+  );
+}
+
+function FloorLayer({
+  id,
+  active,
+  transitionMs,
+  children,
+}: {
+  id: FloorMode;
+  active: boolean;
+  transitionMs: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      id={`floor-panel-${id}`}
+      role="tabpanel"
+      aria-hidden={!active}
+      className={cn(
+        "absolute inset-0 min-h-0",
+        active ? "opacity-100" : "pointer-events-none opacity-0",
+      )}
+      style={{ transition: `opacity ${transitionMs}ms ease-out` }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -210,6 +405,16 @@ function Header({
           <span className="font-mono tabular-nums text-[var(--color-text-secondary)]">
             {Math.round(progress)}%
           </span>
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              href={`/i/${id}/dossier`}
+              aria-label="Vista dossier solamente"
+              title="Vista dossier solamente"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span className="hidden sm:ml-1 sm:inline">Dossier</span>
+            </Link>
+          </Button>
           <Button variant="ghost" size="sm" aria-label="Compartir">
             <Share2 className="h-3.5 w-3.5" />
           </Button>

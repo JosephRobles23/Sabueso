@@ -11,6 +11,12 @@ export interface TimelineScrubberProps {
   /** Currently-selected time. If null, the thumb sits at the rightmost edge. */
   value?: Date | null;
   onTimeChange?: (date: Date) => void;
+  /**
+   * Fired when the user double-clicks one of the event dots — the consumer
+   * should center / zoom the graph on that event (and snap the scrubber to
+   * that timestamp).
+   */
+  onEventZoom?: (event: InvestigationEvent) => void;
   /** Optional override of the date range. Defaults to event min/max. */
   range?: { min: Date; max: Date };
   className?: string;
@@ -22,6 +28,7 @@ export function TimelineScrubber({
   events,
   value,
   onTimeChange,
+  onEventZoom,
   range,
   className,
 }: TimelineScrubberProps) {
@@ -158,11 +165,19 @@ export function TimelineScrubber({
             ? (PROFILE_BY_CALLSIGN.get(e.agent_callsign)?.color ?? "var(--color-text-muted)")
             : "var(--color-text-muted)";
           return (
-            <span
+            <button
               key={e.id}
-              aria-hidden
-              className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{ left: `${ePct * 100}%`, backgroundColor: color }}
+              type="button"
+              aria-label={`Evento ${e.type} en ${new Date(t).toLocaleDateString("es-PE")}`}
+              title={`${e.type}${e.agent_callsign ? ` · ${e.agent_callsign}` : ""}`}
+              onPointerDown={(ev) => ev.stopPropagation()}
+              onDoubleClick={(ev) => {
+                ev.stopPropagation();
+                onTimeChange?.(new Date(t));
+                onEventZoom?.(e);
+              }}
+              className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full p-0 outline-none transition-transform hover:scale-150 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-surface-2)]"
+              style={{ left: `${ePct * 100}%`, backgroundColor: color, border: "none" }}
             />
           );
         })}

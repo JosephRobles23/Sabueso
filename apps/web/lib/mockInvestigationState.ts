@@ -50,6 +50,12 @@ export interface GraphEdge {
   semantic: GraphSemantic;
   /** ISO date for time-scrubbing. */
   occurred_at?: string;
+  /**
+   * Open bag for edge-specific data (amount_pen for money-flow edges,
+   * is_relative for ties to a close beneficiary, etc.). Consumed by
+   * SankeyView / TimelineView; ignored by the force-directed graph.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 export interface ActiveDelegation {
@@ -226,6 +232,28 @@ const EDGES: GraphEdge[] = [
     weight: 0.8,
     semantic: "conflict",
     occurred_at: "2019-11-30",
+  },
+  {
+    id: "edg-7",
+    from: "ent-municipalidad",
+    to: "ent-constructora",
+    type: "received_amount",
+    confidence: 0.92,
+    weight: 4.82,
+    semantic: "suspicious",
+    occurred_at: "2017-10-15",
+    metadata: { amount_pen: 4_820_000, is_relative: true, contract_id: "ent-contrato-2017" },
+  },
+  {
+    id: "edg-8",
+    from: "ent-municipalidad",
+    to: "ent-mvc",
+    type: "received_amount",
+    confidence: 0.88,
+    weight: 1.2,
+    semantic: "declared",
+    occurred_at: "2018-04-02",
+    metadata: { amount_pen: 1_200_000, is_relative: false },
   },
 ];
 

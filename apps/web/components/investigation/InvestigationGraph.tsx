@@ -33,6 +33,12 @@ export interface InvestigationGraphProps {
   onNodeClick?: (entityId: string) => void;
   /** Optional date filter (start/end ISO). Edges outside the range are dimmed. */
   filterRange?: { start: string | null; end: string | null };
+  /**
+   * Optional upper-bound timestamp. Edges with `occurred_at > currentTime` are
+   * hidden. Used by the TimelineScrubber to animate the graph back through
+   * time without disturbing existing filter state.
+   */
+  currentTime?: Date | null;
   className?: string;
 }
 
@@ -65,6 +71,7 @@ export function InvestigationGraph({
   entities,
   edges,
   onNodeClick,
+  currentTime,
   className,
 }: InvestigationGraphProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -173,11 +180,13 @@ export function InvestigationGraph({
 
   // Filter view (does not affect simulation — keeps layout stable while user
   // toggles filters).
+  const currentTimeIso = currentTime ? currentTime.toISOString() : null;
   const visibleEdges = edges.filter((e) => {
     if (redOnly && !["suspicious", "conflict"].includes(e.semantic)) return false;
     if (e.weight < minWeight) return false;
     if (fromDate && e.occurred_at && e.occurred_at < fromDate) return false;
     if (toDate && e.occurred_at && e.occurred_at > toDate) return false;
+    if (currentTimeIso && e.occurred_at && e.occurred_at > currentTimeIso) return false;
     return true;
   });
 

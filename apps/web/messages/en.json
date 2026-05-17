@@ -1,0 +1,58 @@
+{
+  "common": {
+    "appName": "Sabueso",
+    "tagline": "On the trail of corruption",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "back": "Back",
+    "share": "Share",
+    "search": "Search",
+    "loading": "Loading..."
+  },
+  "marketing": {
+    "title": "Sabueso",
+    "subtitle": "An investigative newsroom that never sleeps.",
+    "description": "Seven AI investigators cross-reference public records live to audit public officials across LATAM.",
+    "ctaPrimary": "Start an investigation",
+    "ctaSecondary": "How it works",
+    "featuresTitle": "The team",
+    "feature1": "Sabueso orchestrates. The seven investigate. La Jueza verifies.",
+    "feature2": "Every finding ships with a public source, a date, and a confidence score.",
+    "feature3": "The dossier is published as a cited PDF, ready for the newsroom."
+  },
+  "app": {
+    "home": "Home",
+    "searchPlaceholder": "Investigate an official, candidate or tax ID...",
+    "searchHint": "e.g.: \"Vladimir Cerrón\", \"RUC 20100070970\"",
+    "trending": "Trending today",
+    "recent": "Your recent investigations",
+    "noResults": "No results yet. Try a different search.",
+    "noRecent": "No investigations yet. Start with a search above.",
+    "openInvestigation": "Open investigation",
+    "kbdHint": "⌘K"
+  },
+  "investigation": {
+    "missionControl": "Mission Control",
+    "investigationFloor": "Investigation Floor",
+    "dossier": "Dossier",
+    "preparing": "Preparing investigation...",
+    "loadingPlan": "The team is gearing up.",
+    "loadingFloor": "Waiting for the first findings.",
+    "loadingDossier": "The dossier will fill up in real time."
+  },
+  "auth": {
+    "loginTitle": "Sign in to Sabueso",
+    "loginSubtitle": "Magic link via email or Google account.",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "sendMagicLink": "Send magic link",
+    "continueWithGoogle": "Continue with Google",
+    "anonymousHint": "You can also browse without an account.",
+    "magicSent": "Check your inbox for the magic link."
+  }
+}

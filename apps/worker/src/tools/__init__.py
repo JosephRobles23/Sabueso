@@ -14,7 +14,15 @@ from .errors import (
     ToolError,
 )
 from .rate_limit import RateLimiter, get_rate_limiter, set_rate_limiter
-from .registry import ToolDef, ToolRegistry, load_pe_tools
+from .registry import (
+    ToolDef,
+    ToolRegistry,
+    load_all_tools,
+    load_cl_tools,
+    load_mx_tools,
+    load_pe_tools,
+    load_sv_tools,
+)
 
 __all__ = [
     "InvalidInputError",
@@ -29,7 +37,11 @@ __all__ = [
     "cached_tool_call",
     "get_cache",
     "get_rate_limiter",
+    "load_all_tools",
+    "load_cl_tools",
+    "load_mx_tools",
     "load_pe_tools",
+    "load_sv_tools",
     "set_cache",
     "set_rate_limiter",
 ]

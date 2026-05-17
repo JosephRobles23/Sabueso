@@ -39,6 +39,45 @@ DEFAULT_PLAN_MODEL = "anthropic/claude-sonnet-4.6"
 PLAN_RETRY_LIMIT = 1
 PROMPT_NAME = "sabueso"
 
+# Modo Preview (S-18): países distintos a 'pe' usan subset reducido de
+# investigadores (los únicos con tools disponibles fuera de Perú).
+PREVIEW_INVESTIGATORS: tuple[str, ...] = ("buscador", "letrado", "periodista")
+
+# Catálogo de fuentes disponibles por país. Se inyecta al prompt vía
+# ``limited_list`` para que Sabueso explicite los recursos del país.
+SOURCE_CATALOG: dict[str, list[str]] = {
+    "pe": [
+        "legalize-pe (normas y sentencias)",
+        "SEACE (contratos públicos)",
+        "JNE (candidatos)",
+        "El Peruano (oficial)",
+        "Manolo (declaraciones)",
+        "SUNARP (registros)",
+        "Hemeroteca digital",
+    ],
+    "cl": [
+        "legalize-cl / BCN Chile (preview, dataset acotado)",
+        "Archivo de prensa (cobertura básica)",
+    ],
+    "mx": [
+        "Cámara de Diputados / DOF (preview, dataset acotado)",
+        "Archivo de prensa (cobertura básica)",
+    ],
+    "sv": [
+        "Asamblea Legislativa SV (preview, dataset acotado)",
+        "Archivo de prensa (cobertura básica)",
+    ],
+}
+
+
+def _source_summary(country: str) -> str:
+    sources = SOURCE_CATALOG.get(country) or SOURCE_CATALOG["pe"]
+    return ", ".join(sources)
+
+
+def _is_preview(country: str | None) -> bool:
+    return (country or "pe") != "pe"
+
 
 # Marcadores [BREAKPOINT N — ...] usados en el prompt para dividirlo en
 # secciones cacheables. El loader retorna el texto rendered; aquí lo
@@ -56,6 +95,7 @@ class PlanDeps:
 
 def make_plan_node(deps: PlanDeps) -> _Node:
     async def sabueso_plan(state: InvestigationState) -> dict[str, Any]:
+        country = state.get("country") or "pe"
         prompt = _load_prompt(deps.prompt_loader, state)
         messages = _build_messages(prompt, state)
         # 4 breakpoints: el system message tiene 4+ bloques de contenido,
@@ -67,7 +107,29 @@ def make_plan_node(deps: PlanDeps) -> _Node:
         )
 
         plan_steps = _normalize_plan(plan)
-        events = [
+
+        # Modo Preview (S-18): si el país no es Perú, filtrar el plan al
+        # subset de investigadores con tools disponibles. Si el LLM devolvió
+        # steps inválidos para este país, se sustituyen por los placeholders
+        # del subset.
+        preview_event: dict[str, Any] | None = None
+        if _is_preview(country):
+            plan_steps = _filter_for_preview(plan_steps)
+            preview_event = {
+                "type": "preview_mode_warning",
+                "agent": "sabueso",
+                "payload": {
+                    "country": country,
+                    "available_investigators": list(PREVIEW_INVESTIGATORS),
+                    "available_sources": SOURCE_CATALOG.get(country, []),
+                    "reason": (
+                        "datos limitados fuera de Perú; sólo se ejecutan "
+                        "buscador, letrado y periodista"
+                    ),
+                },
+            }
+
+        events: list[dict[str, Any]] = [
             {
                 "type": "plan_generated",
                 "agent": "sabueso",
@@ -85,6 +147,8 @@ def make_plan_node(deps: PlanDeps) -> _Node:
                 },
             }
         ]
+        if preview_event is not None:
+            events.append(preview_event)
 
         return {
             "plan": plan_steps,
@@ -95,16 +159,42 @@ def make_plan_node(deps: PlanDeps) -> _Node:
     return sabueso_plan
 
 
+def _filter_for_preview(plan_steps: list[PlanStep]) -> list[PlanStep]:
+    """Mantiene sólo steps de investigadores disponibles en Modo Preview.
+
+    Si el plan no contiene ninguno válido (caso fallback o un LLM que
+    decidió mandar Tasadora a Chile), generamos un plan mínimo con los 3
+    investigadores del subset para que el grafo no quede sin trabajo.
+    """
+    allowed = set(PREVIEW_INVESTIGATORS)
+    filtered = [s for s in plan_steps if s.get("agent") in allowed]
+    if filtered:
+        return filtered
+
+    return [
+        {"agent": "buscador", "task": "Identificar entidad y aliases", "priority": 1},
+        {"agent": "letrado", "task": "Buscar normativa relevante", "priority": 2},
+        {"agent": "periodista", "task": "Revisar archivos de prensa", "priority": 3},
+    ]
+
+
 def _load_prompt(loader: PromptLoader, state: InvestigationState) -> LoadedPrompt:
     entity = state.get("entity") or {}
+    country = state.get("country") or "pe"
+    preview = _is_preview(country)
     variables = {
-        "country": state.get("country", "pe"),
+        "country": country,
         "locale": state.get("locale", "es"),
         "entity_name": entity.get("name", ""),
         "entity_type": entity.get("type", ""),
         "identifier": entity.get("identifier", ""),
         "user_query": state.get("user_query", ""),
         "tool_catalog": "",  # poblado por orchestrator si está disponible
+        "limited_list": _source_summary(country),
+        "preview_mode": preview,
+        "available_investigators": (
+            ", ".join(PREVIEW_INVESTIGATORS) if preview else "equipo completo"
+        ),
     }
     return loader.load(PROMPT_NAME, variables=variables)
 

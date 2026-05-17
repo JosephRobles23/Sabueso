@@ -29,7 +29,7 @@ from .orchestrator import (
     build_graph,
     open_postgres_checkpointer,
 )
-from .tools.registry import load_pe_tools
+from .tools.registry import load_all_tools
 
 DEFAULT_COUNTRY = "pe"
 DEFAULT_LOCALE = "es"
@@ -60,9 +60,10 @@ def run() -> int:
         execution=os.environ.get("CLOUD_RUN_EXECUTION"),
     )
 
-    # Carga las tools de Perú para que el ToolRegistry las tenga
-    # registradas antes de instanciar El Contador.
-    load_pe_tools()
+    # Carga las tools de todos los países disponibles (PE + Modo Preview
+    # CL/MX/SV de S-18) para que el ToolRegistry las tenga registradas
+    # antes de instanciar los investigadores.
+    load_all_tools()
 
     pool = await asyncpg.create_pool(
         dsn=db_url,

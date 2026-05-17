@@ -270,3 +270,26 @@ def load_pe_tools() -> None:
         seace,
         sunarp,
     )
+
+
+def load_cl_tools() -> None:
+    """Importa los módulos de tools CL. S-18 (Modo Preview)."""
+    from .cl import legalize  # noqa: F401, PLC0415
+
+
+def load_mx_tools() -> None:
+    """Importa los módulos de tools MX. S-18 (Modo Preview)."""
+    from .mx import legalize  # noqa: F401, PLC0415
+
+
+def load_sv_tools() -> None:
+    """Importa los módulos de tools SV. S-18 (Modo Preview)."""
+    from .sv import legalize  # noqa: F401, PLC0415
+
+
+def load_all_tools() -> None:
+    """Carga todos los países disponibles. Llamar al startup del worker."""
+    load_pe_tools()
+    load_cl_tools()
+    load_mx_tools()
+    load_sv_tools()

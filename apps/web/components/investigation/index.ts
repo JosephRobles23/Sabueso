@@ -19,3 +19,21 @@ export type { ConfidenceBadgeProps } from "./ConfidenceBadge";
 
 export { EvidenceChip } from "./EvidenceChip";
 export type { EvidenceChipProps, EvidenceSourceType } from "./EvidenceChip";
+
+export { OperativesFloor } from "./OperativesFloor";
+export type { OperativesFloorProps } from "./OperativesFloor";
+
+export { MissionControl } from "./MissionControl";
+export type { MissionControlProps } from "./MissionControl";
+
+export { InvestigationGraph } from "./InvestigationGraph";
+export type { InvestigationGraphProps } from "./InvestigationGraph";
+
+export { DossierPanel } from "./DossierPanel";
+export type { DossierPanelProps } from "./DossierPanel";
+
+export { DrilldownPanel } from "./DrilldownPanel";
+export type { DrilldownPanelProps } from "./DrilldownPanel";
+
+export { TimelineScrubber } from "./TimelineScrubber";
+export type { TimelineScrubberProps } from "./TimelineScrubber";

@@ -2,7 +2,27 @@
   "permissions": {
     "allow": [
       "Bash(uv run *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(uv pip *)",
+      "Bash(gcloud storage *)",
+      "Bash(gcloud projects *)",
+      "Bash(python -m py_compile flows/common/db.py flows/common/embedding.py flows/common/extract.py flows/common/gcs.py flows/common/http.py flows/common/logging.py flows/common/upsert.py flows/pe_legalize_flow.py flows/pe_seace_flow.py flows/pe_jne_pdfs_flow.py src/main.py)",
+      "Bash(uv sync *)",
+      "Bash(gcloud run *)",
+      "Bash(gcloud logging *)",
+      "Bash(curl -s -o /dev/null -w \"github.com/crafter-research/legalize-pe -> %{http_code}\\\\n\" \"https://github.com/crafter-research/legalize-pe\" --max-time 10)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/crafter-research/legalize-pe/main/README.md\" --max-time 15)",
+      "Bash(curl -sL \"https://api.github.com/repos/crafter-research/legalize-pe/contents/leyes/pe\" --max-time 15)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\('files:', len\\(data\\)\\); print\\('first:', data[0]['name'] if data else 'none'\\); print\\('url:', data[0].get\\('download_url', '?'\\) if data else '?'\\)\")",
+      "Bash(curl -sI \"https://data.open-contracting.org/en/publication/135/download?name=2025.jsonl.gz\" --max-time 15)",
+      "Bash(curl -sL \"https://data.open-contracting.org/en/publication/135/\" --max-time 15)",
+      "Bash(python -c ' *)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/crafter-research/legalize-pe/main/leyes/pe/articulo-1-codigo-civil.md\" --max-time 15)",
+      "Bash(mkdir -p /tmp/ocds_probe)",
+      "Read(//tmp/**)",
+      "Bash(curl -sL \"https://data.open-contracting.org/en/publication/135/download?name=2025.jsonl.gz\" -o 2025.jsonl.gz --max-time 120 -w \"size=%{size_download}\\\\n\")",
+      "Bash(gunzip -c 2025.jsonl.gz)",
+      "Bash(PYTHONPATH=. uv run python -c ' *)"
     ]
   },
   "hooks": {

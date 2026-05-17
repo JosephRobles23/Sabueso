@@ -6,9 +6,11 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
-    # Agent orchestration
-    "langgraph>=0.4.0",
-    "langgraph-checkpoint-postgres>=2.0.0",
+    # Agent orchestration — pin exacta durante hackathon (S-06).
+    # No actualizar sin re-correr test_graph_integration.py.
+    "langgraph==1.2.0",
+    "langgraph-checkpoint==4.1.0",
+    "langgraph-checkpoint-postgres==3.1.0",
     "langchain-core>=0.3.0",
     "langsmith>=0.2.0",
 

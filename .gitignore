@@ -58,3 +58,4 @@ service-account-key.json
 # OS
 .DS_Store
 *.swp
+.claude/settings.local.json

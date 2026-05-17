@@ -37,3 +37,9 @@ export type { DrilldownPanelProps } from "./DrilldownPanel";
 
 export { TimelineScrubber } from "./TimelineScrubber";
 export type { TimelineScrubberProps } from "./TimelineScrubber";
+
+export { SankeyView } from "./SankeyView";
+export type { SankeyViewProps } from "./SankeyView";
+
+export { TimelineView } from "./TimelineView";
+export type { TimelineViewProps } from "./TimelineView";

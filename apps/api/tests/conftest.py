@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -28,6 +29,7 @@ class FakePool:
         self.enqueued: list[dict[str, Any]] = []
         self.fail_healthcheck = False
         self.search_results: list[dict[str, Any]] = []
+        self.investigator_configs: dict[tuple[UUID, str], dict[str, Any]] = {}
 
     # asyncpg API surface ---------------------------------------------------
 
@@ -85,6 +87,25 @@ class FakePool:
         if "from investigations" in q:
             (investigation_id,) = args
             return self.investigations.get(investigation_id)
+        if "insert into investigator_configs" in q:
+            user_id, callsign, partial_json = args
+            partial = json.loads(partial_json) if isinstance(partial_json, str) else partial_json
+            key = (user_id, callsign)
+            existing = self.investigator_configs.get(key)
+            if existing is None:
+                row = {
+                    "user_id": user_id,
+                    "callsign": callsign,
+                    "config": dict(partial or {}),
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            else:
+                merged = dict(existing["config"])
+                merged.update(partial or {})
+                row = {**existing, "config": merged}
+            self.investigator_configs[key] = row
+            return row
         raise AssertionError(f"unexpected fetchrow: {query!r}")
 
     async def fetch(self, query: str, *args: Any) -> list[Any]:
@@ -100,6 +121,13 @@ class FakePool:
                 e for e in self.events
                 if e["investigation_id"] == inv_id and e["id"] > last_id
             ]
+        if "from investigator_configs" in q:
+            (user_id,) = args
+            rows = [
+                row for (uid, _cs), row in self.investigator_configs.items()
+                if uid == user_id
+            ]
+            return sorted(rows, key=lambda r: r["callsign"])
         raise AssertionError(f"unexpected fetch: {query!r}")
 
     async def execute(self, query: str, *args: Any) -> str:
@@ -136,13 +164,18 @@ def settings() -> Settings:
 
 @pytest.fixture
 async def client(settings: Settings, fake_pool: FakePool) -> AsyncIterator[AsyncClient]:
-    """ASGI client that skips the real lifespan: we inject our FakePool directly."""
+    """ASGI client that skips the real lifespan: we inject our FakePool directly.
+
+    The app is attached as `client.app` so tests can register
+    dependency_overrides (e.g. fake auth) without poking private attrs.
+    """
     app = create_app(settings)
     # Bypass lifespan: ASGITransport with lifespan="off" never runs our startup.
     app.state.db_pool = fake_pool
     app.state.settings = settings
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
+        c.app = app  # type: ignore[attr-defined]
         yield c
 
 

@@ -6,9 +6,16 @@ from src.models.investigation import (
     InvestigationCreated,
     InvestigationStatus,
 )
+from src.models.investigator_config import (
+    ConfigPatch,
+    InvestigatorCallsign,
+    InvestigatorConfig,
+    InvestigatorConfigList,
+)
 from src.models.search import SearchHit, SearchResponse
 
 __all__ = [
+    "ConfigPatch",
     "Country",
     "Entity",
     "EntityType",
@@ -18,6 +25,9 @@ __all__ = [
     "InvestigationCreated",
     "InvestigationEvent",
     "InvestigationStatus",
+    "InvestigatorCallsign",
+    "InvestigatorConfig",
+    "InvestigatorConfigList",
     "SearchHit",
     "SearchResponse",
 ]

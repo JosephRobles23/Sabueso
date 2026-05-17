@@ -9,6 +9,7 @@ from src.db.repository.claims import ClaimRepo
 from src.db.repository.entities import EntityRepo
 from src.db.repository.events import EventRepo
 from src.db.repository.investigations import InvestigationRepo
+from src.db.repository.investigator_configs import InvestigatorConfigRepo
 from src.services.investigation import InvestigationService
 from src.services.search import SearchService
 from src.settings import Settings, get_settings
@@ -45,6 +46,10 @@ def get_event_repo(pool: PoolDep) -> EventRepo:
     return EventRepo(pool)
 
 
+def get_config_repo(pool: PoolDep) -> InvestigatorConfigRepo:
+    return InvestigatorConfigRepo(pool)
+
+
 def get_investigation_service(
     settings: SettingsDep,
     investigations: Annotated[InvestigationRepo, Depends(get_investigation_repo)],
@@ -71,3 +76,4 @@ InvestigationServiceDep = Annotated[InvestigationService, Depends(get_investigat
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 EntityRepoDep = Annotated[EntityRepo, Depends(get_entity_repo)]
 ClaimRepoDep = Annotated[ClaimRepo, Depends(get_claim_repo)]
+ConfigRepoDep = Annotated[InvestigatorConfigRepo, Depends(get_config_repo)]

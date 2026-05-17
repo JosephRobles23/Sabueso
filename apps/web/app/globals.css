@@ -154,3 +154,30 @@
 @utility animate-bubble-pop {
   animation: bubble-pop 200ms var(--ease-spring-soft);
 }
+
+/* Reduced-motion guard (uiux-spec §3.5) — kills marching ants, LED pulse, and
+ * bubble pop for users with prefers-reduced-motion: reduce. Composites also
+ * branch off `usePrefersReducedMotion()` to skip spring + conflict pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marching-ants,
+  .animate-pulse-led,
+  .animate-bubble-pop,
+  .animate-conflict-pulse {
+    animation: none !important;
+  }
+}
+
+@keyframes conflict-pulse {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 0 var(--color-conflict));
+  }
+  50% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 6px var(--color-conflict));
+  }
+}
+
+@utility animate-conflict-pulse {
+  animation: conflict-pulse 1.6s ease-in-out infinite;
+}

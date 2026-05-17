@@ -102,6 +102,18 @@ export default function DevComponentsPage() {
           Aislamiento visual de los 6 componentes atómicos. Mock data hardcoded — los datos reales
           (SSE/Realtime) se enchufan en pasos posteriores de S-12.
         </p>
+        <p className="mt-4 inline-flex items-center gap-2 rounded-[var(--radius-sm)] border bg-[var(--color-surface-2)] px-3 py-1.5 text-xs">
+          <span aria-hidden>▶</span>
+          <a
+            href="/dev/cinema"
+            className="font-callsign text-[var(--color-accent)] underline-offset-2 hover:underline"
+          >
+            /dev/cinema
+          </a>
+          <span className="text-[var(--color-text-secondary)]">
+            — shell completa con los 5 compuestos sobre el fixture mock.
+          </span>
+        </p>
       </header>
 
       <div className="flex flex-col gap-12">

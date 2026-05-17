@@ -13,20 +13,12 @@ import sys
 
 import structlog
 
-
-def _configure_logging() -> None:
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso", utc=True),
-            structlog.processors.JSONRenderer(),
-        ]
-    )
+from src.observability import configure_langsmith, configure_logging
 
 
 def run() -> int:
-    _configure_logging()
+    configure_logging()
+    configure_langsmith()
     log = structlog.get_logger("sabueso.worker")
     log.info(
         "worker.placeholder_started",

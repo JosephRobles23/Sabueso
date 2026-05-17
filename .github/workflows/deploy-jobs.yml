@@ -1,0 +1,197 @@
+name: deploy-jobs
+
+# Builds + deploys the Cloud Run Jobs (worker, pipeline, pdf). Each job is a
+# matrix shard with its own paths filter — pushing a worker change won't
+# rebuild the pdf image. Manual dispatch lets the team force a specific
+# subset (or all of them) from the Actions UI.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/worker/**"
+      - "apps/pipeline/**"
+      - "apps/pdf/**"
+      - ".github/workflows/deploy-jobs.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which job(s) to deploy: worker | pipeline | pdf | all"
+        default: "all"
+        required: false
+      tag:
+        description: "Image tag (defaults to short SHA)"
+        required: false
+
+concurrency:
+  group: deploy-jobs-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      worker: ${{ steps.filter.outputs.worker }}
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+      pdf: ${{ steps.filter.outputs.pdf }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            worker:
+              - 'apps/worker/**'
+              - '.github/workflows/deploy-jobs.yml'
+            pipeline:
+              - 'apps/pipeline/**'
+              - '.github/workflows/deploy-jobs.yml'
+            pdf:
+              - 'apps/pdf/**'
+              - '.github/workflows/deploy-jobs.yml'
+
+  deploy:
+    needs: changes
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: worker
+            path: apps/worker
+            image_name: sabueso-worker
+            job_name: investigation-worker
+            memory: 2Gi
+            cpu: "2"
+            timeout: "3600"
+            secrets: >-
+              SUPABASE_DB_URL=supabase-db-url:latest,
+              OPENROUTER_API_KEY=openrouter-api-key:latest,
+              ANTHROPIC_API_KEY=anthropic-api-key:latest,
+              LANGCHAIN_API_KEY=langchain-api-key:latest
+          - app: pipeline
+            path: apps/pipeline
+            image_name: sabueso-pipeline
+            job_name: ingest-pipeline
+            memory: 1Gi
+            cpu: "1"
+            timeout: "3600"
+            secrets: >-
+              SUPABASE_DB_URL=supabase-db-url:latest,
+              OPENAI_API_KEY=openai-api-key:latest
+          - app: pdf
+            path: apps/pdf
+            image_name: sabueso-pdf
+            job_name: dossier-pdf
+            memory: 2Gi
+            cpu: "2"
+            timeout: "900"
+            secrets: ""
+
+    name: deploy (${{ matrix.app }})
+    steps:
+      - name: Should run?
+        id: gate
+        run: |
+          changed='${{ needs.changes.outputs[matrix.app] }}'
+          target='${{ github.event.inputs.target }}'
+          if [ "$changed" = "true" ] || [ "$target" = "all" ] || [ "$target" = "${{ matrix.app }}" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - if: steps.gate.outputs.run == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Set image URI
+        id: image
+        run: |
+          URI="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ matrix.image_name }}:${{ steps.tag.outputs.tag }}"
+          echo "uri=$URI" >> "$GITHUB_OUTPUT"
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Build image
+        working-directory: ${{ matrix.path }}
+        run: docker build -t "${{ steps.image.outputs.uri }}" .
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Push image
+        run: docker push "${{ steps.image.outputs.uri }}"
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Tag image as :latest
+        run: |
+          LATEST="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ matrix.image_name }}:latest"
+          docker tag "${{ steps.image.outputs.uri }}" "$LATEST"
+          docker push "$LATEST"
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Deploy Cloud Run Job (upsert)
+        run: |
+          # Trim whitespace from the multi-line YAML secrets string.
+          SECRETS=$(echo "${{ matrix.secrets }}" | tr -d ' \n')
+          ARGS=(
+            "${{ matrix.job_name }}"
+            --project="${{ env.GCP_PROJECT_ID }}"
+            --region="${{ env.GCP_REGION }}"
+            --image="${{ steps.image.outputs.uri }}"
+            --service-account="${{ secrets.GCP_RUNTIME_SA }}"
+            --task-timeout="${{ matrix.timeout }}"
+            --memory="${{ matrix.memory }}"
+            --cpu="${{ matrix.cpu }}"
+            --max-retries=1
+            --parallelism=1
+            --tasks=1
+            --labels=app=sabueso,component=${{ matrix.app }}
+            --set-env-vars="LOG_LEVEL=INFO,ENVIRONMENT=production,GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }},GCP_REGION=${{ env.GCP_REGION }}"
+          )
+          if [ -n "$SECRETS" ]; then
+            ARGS+=(--set-secrets="$SECRETS")
+          fi
+          gcloud run jobs deploy "${ARGS[@]}"
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Show job descriptor
+        run: |
+          gcloud run jobs describe "${{ matrix.job_name }}" \
+            --project="${{ env.GCP_PROJECT_ID }}" \
+            --region="${{ env.GCP_REGION }}" \
+            --format='value(metadata.name,spec.template.spec.template.spec.containers[0].image)'

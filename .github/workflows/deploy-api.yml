@@ -1,0 +1,109 @@
+name: deploy-api
+
+# Deploys apps/api to Cloud Run on every push to main when the API code,
+# Dockerfile, or this workflow changes. Manual dispatch is also supported so
+# the team can re-roll without an empty commit.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag (defaults to short SHA)"
+        required: false
+
+concurrency:
+  group: deploy-api-${{ github.ref }}
+  cancel-in-progress: false  # let in-flight deploys finish — Cloud Run handles concurrent revisions
+
+permissions:
+  contents: read
+  id-token: write  # required for Workload Identity Federation
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+  IMAGE_NAME: sabueso-api
+  SERVICE: sabueso-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Set image URI
+        id: image
+        run: |
+          URI="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+          echo "uri=$URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        working-directory: apps/api
+        run: docker build -t "${{ steps.image.outputs.uri }}" .
+
+      - name: Push image
+        run: docker push "${{ steps.image.outputs.uri }}"
+
+      - name: Tag image as :latest
+        run: |
+          LATEST="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.IMAGE_NAME }}:latest"
+          docker tag "${{ steps.image.outputs.uri }}" "$LATEST"
+          docker push "$LATEST"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${{ env.SERVICE }}" \
+            --project="${{ env.GCP_PROJECT_ID }}" \
+            --region="${{ env.GCP_REGION }}" \
+            --image="${{ steps.image.outputs.uri }}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --min-instances=1 \
+            --max-instances=10 \
+            --concurrency=80 \
+            --timeout=3600 \
+            --cpu=1 \
+            --memory=1Gi \
+            --no-cpu-throttling \
+            --port=8080 \
+            --service-account="${{ secrets.GCP_RUNTIME_SA }}" \
+            --set-env-vars="GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }},GCP_REGION=${{ env.GCP_REGION }},LOG_LEVEL=INFO,ENVIRONMENT=production" \
+            --set-secrets="SUPABASE_DB_URL=supabase-db-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,SUPABASE_JWKS_URL=supabase-jwks-url:latest,VERCEL_KV_REST_API_URL=vercel-kv-rest-api-url:latest,VERCEL_KV_REST_API_TOKEN=vercel-kv-rest-api-token:latest" \
+            --revision-suffix="${{ steps.tag.outputs.tag }}"
+
+      - name: Show service URL
+        run: |
+          gcloud run services describe "${{ env.SERVICE }}" \
+            --project="${{ env.GCP_PROJECT_ID }}" \
+            --region="${{ env.GCP_REGION }}" \
+            --format='value(status.url)'

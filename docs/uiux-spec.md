@@ -12,8 +12,8 @@ Sabueso no es ni un "chatbot serio" ni una "sala de guerra militar". Es una **re
 
 Tres referencias estéticas a tener presentes mientras se diseña:
 
-1. **NYT The Daily / ProPublica** — tipografía editorial seria, hierarchy clara, datos en mono.
-2. **Bloomberg Terminal / Patient Zero (Showtime)** — densidad de información, color funcional, sensación de "pasan cosas".
+1. **Claude / Anthropic** — paleta cálida (terra cotta + cremas), tipografía serif editorial (Copernicus), sans humanista (Styrene B), minimalismo con calidez. Base de toda la identidad visual.
+2. **NYT The Daily / ProPublica** — hierarchy clara, datos en mono, seriedad periodística.
 3. **Hermes War Room** — la idea de operativos visibles, drill-downs, delegación dibujada.
 
 El tono: *forense pero humano*. Los agentes tienen personalidad (nombres, especialidades, color asignado) pero los datos son fríos y trazables.
@@ -61,62 +61,98 @@ Cada subagente es un personaje con nombre, especialidad, color asignado y avatar
 
 ## 3. Sistema de diseño
 
-### 3.1 Paleta de colores
+> **Identidad visual base: Anthropic (Claude).** Sabueso adopta la paleta cálida, la tipografía editorial y el branding de Claude/Anthropic como fundación. Los tokens se extienden con colores semánticos propios para la capa de investigación.
 
-**Base (modo oscuro por defecto, claro disponible):**
+### 3.1 Branding
 
-```
-bg-canvas        #0E0E10   /* fondo principal — casi negro con leve azulado */
-bg-surface       #18181B   /* paneles principales */
-bg-surface-2     #1F1F23   /* paneles anidados, cards */
-bg-paper         #F4E9D3   /* "paper texture" para badges, evidencia */
-border-default   #2A2A2E   /* borders neutros */
-border-strong    #3F3F46   /* borders énfasis */
-text-primary     #FAFAF9   /* off-white principal */
-text-secondary   #A1A1AA   /* secundario */
-text-muted       #71717A   /* terciario */
-text-paper       #1C1917   /* texto sobre bg-paper */
-```
+- **Color primario de marca:** Terra Cotta `#DA7756` — el naranja cálido característico de Claude.
+- **Filosofía cromática:** tonos terrosos, cálidos y humanistas. Nada frío ni clínico. El modo oscuro se siente como "conversación de noche", no como terminal.
+- **Logo:** el ícono de Sabueso (perro detective con lupa) usa como acento principal el terra cotta `#DA7756` para mantener coherencia con el ecosistema Claude.
 
-**Semánticos de investigación:**
+### 3.2 Paleta de colores
+
+**Modo claro (default):**
 
 ```
-declared        #34D399   /* verde moss — declarado por el funcionario */
-discovered      #60A5FA   /* azul acero — cross-reference de fuente pública */
-ambiguous       #FBBF24   /* ámbar — requiere verificación */
-suspicious      #F87171   /* salmón — patrón anómalo detectado */
-conflict        #DC2626   /* crimson profundo — conflicto de interés confirmado */
-verified        #A78BFA   /* lavanda — confirmado por La Jueza */
+bg-canvas        #FAF9F5   /* fondo principal — off-white cálido (Claude light) */
+bg-surface       #FFFFFF   /* paneles, cards elevadas */
+bg-surface-2     #F5F3EE   /* paneles anidados, sidebar */
+bg-paper         #EEECE2   /* "paper texture" para badges, evidencia */
+border-default   #E8E6DC   /* borders neutros */
+border-strong    #D4D2CA   /* borders énfasis */
+text-primary     #141413   /* near-black con subtono cálido */
+text-secondary   #5A5750   /* gris oscuro cálido */
+text-muted       #B0AEA5   /* terciario */
+text-paper       #3D3929   /* texto sobre bg-paper */
+accent           #DA7756   /* terra cotta — acento principal Claude */
+accent-hover     #BD5D3A   /* terra cotta profundo — hover/active */
+accent-subtle    #DA775620 /* terra cotta 12% — tint de fondo */
+```
+
+**Modo oscuro:**
+
+```
+bg-canvas        #141413   /* fondo principal — near-black cálido (Claude dark) */
+bg-surface       #1D1D1B   /* paneles principales */
+bg-surface-2     #262623   /* paneles anidados, cards */
+bg-paper         #2E2C28   /* "paper texture" adaptado a dark */
+border-default   #3D3A35   /* borders neutros */
+border-strong    #4A4944   /* borders énfasis */
+text-primary     #FAF9F5   /* off-white cálido (light invertido) */
+text-secondary   #B0AEA5   /* gris medio cálido */
+text-muted       #706E68   /* terciario */
+text-paper       #E8E6DC   /* texto sobre bg-paper (dark) */
+accent           #DA7756   /* terra cotta — consistente en ambos temas */
+accent-hover     #E8956F   /* terra cotta claro — hover en fondo oscuro */
+accent-subtle    #DA775620 /* terra cotta 12% — tint de fondo */
+```
+
+**Semánticos de investigación (mismos en ambos modos, ajustados para contraste):**
+
+```
+declared        #788C5D   /* verde bosque Anthropic — declarado por el funcionario */
+discovered      #6A9BCC   /* azul Anthropic — cross-reference de fuente pública */
+ambiguous       #D4A843   /* ámbar terroso — requiere verificación */
+suspicious      #C4583A   /* rojo terracota — patrón anómalo detectado */
+conflict        #9B2C2C   /* rojo profundo — conflicto de interés confirmado */
+verified        #6A9BCC   /* azul acero Anthropic — confirmado por La Jueza */
 ```
 
 **De personajes:** los 7 colores listados en §2. Se usan como **acento, stripe izquierdo del card, y tinte del cubículo**. Nunca como fondo de gran área.
 
-### 3.2 Tipografía
+### 3.3 Tipografía
 
-| Uso | Familia | Peso | Tracking |
-|---|---|---|---|
-| Display H1 (página) | **Antonio** | 600 | -0.02em |
-| Section H2 | **Antonio** | 500 | -0.01em |
-| Callsigns (nombres de investigador) | **Instrument Serif** italic | 400 | normal |
-| Body text | **Geist Sans** | 400 | normal |
-| Body emphasis | **Geist Sans** | 500 | normal |
-| Datos: DNI, RUC, $, fechas, IDs | **IBM Plex Mono** | 400 | -0.01em |
-| Code blocks (claims, JSON) | **IBM Plex Mono** | 400 | normal |
+| Uso | Familia | Peso | Tracking | Notas |
+|---|---|---|---|---|
+| Display H1 (página) | **Copernicus** | 600 | -0.02em | Display serif de Claude. Fallback: **Lora** 700 |
+| Section H2 | **Copernicus** | 500 | -0.01em | Fallback: **Lora** 600 |
+| Callsigns (nombres de investigador) | **Lora** italic | 500 | normal | Serif editorial, coherente con la marca |
+| Body text / UI labels | **Styrene B** | 400 | normal | Sans humanista de Claude. Fallback: **Poppins** 400 |
+| Body emphasis | **Styrene B** | 500 | normal | Fallback: **Poppins** 500 |
+| Datos: DNI, RUC, $, fechas, IDs | **JetBrains Mono** | 400 | -0.01em | Monospace oficial del ecosistema Claude |
+| Code blocks (claims, JSON) | **JetBrains Mono** | 400 | normal | — |
 
-Por qué: Antonio (broadcast poster), Instrument Serif (drama narrativo), Geist (legibilidad moderna), IBM Plex Mono (forense). Todas son free, gratis vía Google Fonts o npm.
+**Stack de fallback web:**
+```css
+--font-display: 'Copernicus', 'Lora', ui-serif, Georgia, serif;
+--font-body:    'Styrene B', 'Poppins', ui-sans-serif, system-ui, sans-serif;
+--font-mono:    'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+```
 
-### 3.3 Espacio y radius
+**Por qué:** Copernicus es el display serif de Anthropic (gravitas editorial, tipografía seria). Styrene B es el sans humanista que Claude usa para UI (legible, cálido, no genérico). JetBrains Mono para datos forenses. Lora y Poppins son los fallbacks gratuitos recomendados en las brand guidelines de Anthropic — disponibles vía Google Fonts.
+
+### 3.4 Espacio y radius
 
 ```
 spacing: tailwind default
-radius-sm:    4px   /* chips, badges */
-radius-md:    8px   /* cards, inputs */
-radius-lg:    12px  /* paneles */
-radius-xl:    24px  /* hero sections */
+radius-sm:    6px   /* chips, badges — ligeramente más suave como Claude */
+radius-md:    10px  /* cards, inputs */
+radius-lg:    16px  /* paneles */
+radius-xl:    24px  /* hero sections, modales */
 radius-full:  9999px /* avatars, status LEDs, pills */
 ```
 
-### 3.4 Motion
+### 3.5 Motion
 
 Las animaciones son **rápidas y funcionales**, nunca decorativas:
 
@@ -779,7 +815,7 @@ Cuando todas las pistas se cierran y La Jueza firma:
 
 - **Contraste mínimo 4.5:1** en todo texto sobre fondos. El gris #71717A está al borde — usado solo para texto secundario.
 - **Estados no solo por color**: cada estado tiene también un icono y/o texto. Daltónicos leen el LED + el texto del pill.
-- **Foco visible**: todos los elementos interactivos tienen `:focus-visible` con ring de 2px en `amber-400`.
+- **Foco visible**: todos los elementos interactivos tienen `:focus-visible` con ring de 2px en `accent` (`#DA7756` terra cotta Claude).
 - **Reduced motion**: `prefers-reduced-motion: reduce` → desactiva marching ants, materialización de nodos, pulse LEDs. Solo cross-fades.
 - **Aria-live regions** en el chat, en el kanban, y en el activity timeline del drill-down — para lectores de pantalla cuando entran eventos nuevos.
 - **Navegación por teclado**:
@@ -827,7 +863,7 @@ Tres ajustes para que el demo no falle:
 
 Construye en este orden:
 
-1. Design system tokens + tipografía + paleta (`packages/ui/tokens`)
+1. Design system tokens Claude/Anthropic + tipografía + paleta (`packages/ui/tokens`)
 2. Componentes atómicos (Avatar, StatusPill, ConfidenceBadge, Badge)
 3. Componentes de investigación (Workstation, DelegationArrow, DrilldownPanel)
 4. Layout de `/i/[id]` con 3 paneles

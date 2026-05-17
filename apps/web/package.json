@@ -33,7 +33,6 @@
     "rehype-sanitize": "^6.0.0",
 
     "@nivo/sankey": "^0.88.0",
-    "@visx/timeline": "^3.5.0",
 
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",

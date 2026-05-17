@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.shadcn.io)",
+      "WebFetch(domain:www.brandcolorcode.com)",
+      "WebFetch(domain:mobbin.com)",
+      "WebFetch(domain:beginswithai.com)",
+      "WebFetch(domain:fontofweb.com)",
+      "mcp__codegraph__codegraph_explore",
+      "mcp__codegraph__codegraph_files",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Joseph Robles\\\\Desktop\\\\Sabueso\" -File)",
+      "Bash(Select-Object -ExpandProperty Name)"
+    ]
+  }
+}

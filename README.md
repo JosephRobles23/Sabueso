@@ -26,7 +26,7 @@ Ver `docs/architecture.md` para el modelo C4 completo.
 
 ```bash
 # Prerrequisitos: Node >= 20, pnpm >= 9, Python >= 3.12, uv, Docker
-git clone https://github.com/YOUR_USERNAME/sabueso.git
+git clone https://github.com/JosephRobles23/Sabueso
 cd sabueso
 cp .env.example .env  # Llena las variables
 pnpm install          # Frontend + packages
@@ -46,4 +46,4 @@ MIT — ver [LICENSE](LICENSE)
 
 ---
 
-*Construido en 4 días para [hack@latam 2026](https://hack.indies.la/) con Emdash + Claude + Kimi 🐕‍🦺*
+*Construido en 3 días para [hack@latam 2026](https://hack.indies.la/) con Emdash + Claude + Kimi 🐕‍🦺*

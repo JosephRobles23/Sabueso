@@ -1,0 +1,21 @@
+# Next.js
+apps/web/next-env.d.ts
+apps/web/.next/
+
+# Vercel AI SDK
+apps/web/ai-sdk-cache/
+
+# Environment variables
+apps/web/.env.local
+apps/web/.env.development.local
+apps/web/.env.production.local
+apps/web/.env.test.local
+apps/web/.env.development
+apps/web/.env.production
+apps/web/.env.test
+apps/web/.env
+apps/web/.env.example
+apps/web/.env.local.example
+apps/web/.env.development.local.example
+apps/web/.env.production.local.example
+apps/web/.env.test.local.example

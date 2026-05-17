@@ -424,6 +424,10 @@
 │      ├── proxy/[...path]/route.ts  ── Proxy SSE → Cloud Run (opcional)   │
 │      └── ratelimit/route.ts        ── Vercel KV rate limit               │
 │                                                                          │
+│  proxy.ts                          ── Next 16 proxy (ex-middleware):     │
+│                                       Supabase session refresh + KV      │
+│                                       rate limit                         │
+│                                                                          │
 │  components/                                                             │
 │  ├── ai-elements/                  ── Conversation, Message, Reasoning,  │
 │  │                                    Tool, Source (de Vercel)           │
@@ -1577,7 +1581,7 @@ Búsquedas:    300 / IP / hour (más laxo)
 PDF export:   20 / IP / 24h
 ```
 
-**Implementación:** Vercel KV con clave `ratelimit:{type}:{key}` y TTL, lectura/escritura desde API routes de Next.js (middleware) y desde Cloud Run API (vía HTTP a Vercel REST).
+**Implementación:** Vercel KV con clave `ratelimit:{type}:{key}` y TTL, lectura/escritura desde el **proxy de Next 16** (`apps/web/proxy.ts`, el archivo que en Next ≤15 se llamaba `middleware.ts`) y desde el Cloud Run API (vía HTTP a Vercel REST).
 
 ### 9.5 Cost management
 

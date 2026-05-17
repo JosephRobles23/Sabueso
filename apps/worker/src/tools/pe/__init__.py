@@ -4,7 +4,7 @@ Importar este paquete fuerza el registro de las 8 tools en ``ToolRegistry``.
 """
 
 from ..rate_limit import get_rate_limiter
-from . import el_peruano, jne, legalize, manolo, news, relatives, seace, sunarp
+from . import el_peruano, jne, legalize, manolo, news, relatives, seace, stubs, sunarp
 
 __all__ = [
     "el_peruano",
@@ -14,6 +14,7 @@ __all__ = [
     "news",
     "relatives",
     "seace",
+    "stubs",
     "sunarp",
     "apply_pe_rate_limits",
 ]

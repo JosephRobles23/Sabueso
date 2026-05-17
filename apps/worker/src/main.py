@@ -1,8 +1,8 @@
-"""Worker entrypoint — corre 1 investigación end-to-end (S-10).
+"""Worker entrypoint — corre 1 investigación end-to-end (S-11).
 
 Lee ``INVESTIGATION_ID`` del entorno, abre el pool a Supabase Postgres,
 abre un ``PostgresSaver`` para checkpointing de LangGraph, construye
-``GraphDeps`` con El Contador como único runner real, compila el grafo y
+``GraphDeps`` con los 6 investigadores + La Jueza MoA, compila el grafo y
 lo invoca con ``thread_id=investigation_id``. Exit code 0 si la
 investigación termina ``complete``, 1 si falla.
 
@@ -22,8 +22,15 @@ from typing import Any
 import asyncpg  # type: ignore[import-untyped]
 import structlog
 
+from .investigators.buscador import ElBuscador
 from .investigators.contador import ElContador
+from .investigators.detective import ElDetective
+from .investigators.jueza import LaJueza
+from .investigators.letrado import ElLetrado
+from .investigators.periodista import ElPeriodista
+from .investigators.tasadora import LaTasadora
 from .llm.client import LLMClient
+from .observability import configure_langsmith, configure_logging
 from .orchestrator import (
     GraphDeps,
     build_graph,
@@ -34,11 +41,40 @@ from .tools.registry import load_all_tools
 DEFAULT_COUNTRY = "pe"
 DEFAULT_LOCALE = "es"
 
-from src.observability import configure_langsmith, configure_logging
+
+def _configure_logging() -> None:
+    configure_logging()
+    configure_langsmith()
 
 
-def run() -> int:
-    _configure_logging()
+async def _fetch_investigation_row(pool: Any, investigation_id: str) -> Any:
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            SELECT id, target_entity_id, country, locale, status
+            FROM investigations
+            WHERE id = $1
+            """,
+            investigation_id,
+        )
+
+
+async def _mark_failed(pool: Any, investigation_id: str, error: str) -> None:
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE investigations
+                SET status = 'failed', updated_at = NOW()
+                WHERE id = $1
+                """,
+                investigation_id,
+            )
+    except Exception:  # pragma: no cover — best-effort
+        pass
+
+
+async def run_async() -> int:
     log = structlog.get_logger("sabueso.worker")
 
     investigation_id = os.environ.get("INVESTIGATION_ID")
@@ -60,9 +96,6 @@ def run() -> int:
         execution=os.environ.get("CLOUD_RUN_EXECUTION"),
     )
 
-    # Carga las tools de todos los países disponibles (PE + Modo Preview
-    # CL/MX/SV de S-18) para que el ToolRegistry las tenga registradas
-    # antes de instanciar los investigadores.
     load_all_tools()
 
     pool = await asyncpg.create_pool(
@@ -86,13 +119,25 @@ def run() -> int:
         locale = row.get("locale") or DEFAULT_LOCALE
 
         llm = LLMClient()
-        contador = ElContador(country=country, locale=locale, llm=llm)
+
+        # 6 investigadores + La Jueza MoA — todos siempre-on (decisión G4 del C4).
+        # Las keys son los callsigns SHORT que espera el orchestrator
+        # (`INVESTIGATOR_NAMES` en orchestrator/state.py).
+        investigator_runners: dict[str, Any] = {
+            "buscador": ElBuscador(country=country, locale=locale, llm=llm).run,
+            "tasadora": LaTasadora(country=country, locale=locale, llm=llm).run,
+            "contador": ElContador(country=country, locale=locale, llm=llm).run,
+            "letrado": ElLetrado(country=country, locale=locale, llm=llm).run,
+            "detective": ElDetective(country=country, locale=locale, llm=llm).run,
+            "periodista": ElPeriodista(country=country, locale=locale, llm=llm).run,
+        }
+        jueza = LaJueza(country=country, locale=locale, llm=llm)
 
         deps = GraphDeps(
             llm=llm,
             db_pool=pool,
-            investigator_runners={"contador": contador.run},
-            jueza_runner=None,
+            investigator_runners=investigator_runners,
+            jueza_runner=jueza.verify_all,
             persist_dry_run=False,
         )
 

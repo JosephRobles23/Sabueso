@@ -1,0 +1,66 @@
+name: smoke-test
+
+# Corre el smoke E2E (scripts/smoke-test.sh) contra el API ya desplegado.
+# Dispara en dos escenarios:
+#   1. Manual: workflow_dispatch (útil para validar staging on-demand).
+#   2. Automático: cuando el workflow "deploy-api" termina exitosamente
+#      en main (post-deploy gate).
+#
+# El job NO compila ni publica nada — sólo asume que ${{ secrets.API_BASE }}
+# apunta a un API vivo con la migration 008 aplicada y el worker dispatcher
+# habilitado.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Override del API base URL (https://...). Si vacío, usa SMOKE_API_BASE secret."
+        required: false
+        default: ""
+      entity_query:
+        description: "entity_query para POST /investigate"
+        required: false
+        default: "MINSA"
+  workflow_run:
+    workflows: ["deploy-api"]
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: POST /investigate + drain SSE + GET investigation
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 5
+    env:
+      API_BASE: ${{ github.event.inputs.api_base || secrets.SMOKE_API_BASE }}
+      API_PREFIX: /api/v1
+      API_TOKEN: ${{ secrets.SMOKE_API_TOKEN }}
+      ENTITY_QUERY: ${{ github.event.inputs.entity_query || 'MINSA' }}
+      COUNTRY: pe
+      LOCALE: es
+      SSE_TIMEOUT_S: "30"
+      MIN_EVENTS: "3"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sanity check inputs
+        run: |
+          if [[ -z "${API_BASE}" ]]; then
+            echo "::error::API_BASE no está configurado (input o secret SMOKE_API_BASE)"
+            exit 1
+          fi
+          echo "API_BASE=${API_BASE}"
+
+      - name: Run smoke test
+        run: |
+          chmod +x scripts/smoke-test.sh
+          scripts/smoke-test.sh

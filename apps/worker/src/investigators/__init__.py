@@ -11,9 +11,11 @@ from .base import (
     ToolPermissionError,
     parse_tolerant_json,
 )
+from .contador import ElContador
 
 __all__ = [
     "BaseInvestigator",
+    "ElContador",
     "EventEmitter",
     "JSONParseError",
     "ToolPermissionError",

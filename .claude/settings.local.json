@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(uv run *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm lint *)",
+      "Bash(npx eslint *)",
+      "Bash(pnpm build *)"
     ]
   },
   "hooks": {

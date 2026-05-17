@@ -1,0 +1,51 @@
+# Cloud Run Job — Sabueso investigation worker.
+#
+# This manifest is the declarative source of truth for the worker's runtime
+# shape (timeout / memory / cpu / retries). The deploy script in
+# apps/worker/deploy/cloudrun-deploy.sh applies the same constraints via
+# `gcloud run jobs deploy` flags so day-to-day deploys don't require
+# `gcloud run jobs replace`. Update both in lockstep.
+#
+# Placeholders (REPLACE_*) are substituted by the deploy script or by an IaC
+# tool when applied with `gcloud run jobs replace investigation-worker.yaml`.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: investigation-worker
+  labels:
+    cloud.googleapis.com/location: REPLACE_REGION
+    app: sabueso
+    component: worker
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    spec:
+      # One task per investigation; dispatch_worker() triggers one execution per request.
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          # 60min hard cap per task attempt. Investigation SLA is ~30min p95;
+          # the buffer absorbs slow scraping targets without unbounded burn.
+          timeoutSeconds: 3600
+          # One retry. Investigations are not idempotent end-to-end, but
+          # LangGraph postgres checkpoints let a rerun resume mid-graph.
+          maxRetries: 1
+          serviceAccountName: REPLACE_SERVICE_ACCOUNT
+          containers:
+            - name: worker
+              image: REPLACE_IMAGE
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+              env:
+                - name: LOG_LEVEL
+                  value: INFO
+                - name: GCP_PROJECT_ID
+                  value: REPLACE_PROJECT_ID
+                - name: GCP_REGION
+                  value: REPLACE_REGION
+                # INVESTIGATION_ID is injected per-execution via container override
+                # (see apps/api/src/services/investigation.py::dispatch_worker).

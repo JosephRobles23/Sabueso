@@ -54,6 +54,10 @@ def get_investigation_service(
         investigations=investigations,
         entities=entities,
         queue_name=settings.pgmq_queue,
+        dispatch_enabled=settings.dispatch_worker,
+        gcp_project_id=settings.gcp_project_id,
+        gcp_region=settings.gcp_region,
+        worker_job_name=settings.worker_job_name,
     )
 
 

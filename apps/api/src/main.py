@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.auth.jwks import JWKSCache
 from src.auth.middleware import AuthMiddleware
+from src.auth.rate_limit import build_kv_client
 from src.db.pool import create_pool
 from src.observability.logging import configure_logging
 from src.routes import (
@@ -37,6 +38,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.jwks = jwks_cache
+        app.state.kv_client = build_kv_client(
+            settings.vercel_kv_rest_api_url,
+            settings.vercel_kv_rest_api_token,
+        )
+        if app.state.kv_client is not None:
+            log.info("api.kv_ready")
         try:
             app.state.db_pool = await create_pool(settings)
             log.info(
@@ -58,6 +65,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await pool.close()
             if jwks_cache is not None:
                 await jwks_cache.close()
+            if app.state.kv_client is not None:
+                await app.state.kv_client.aclose()
 
     app = FastAPI(
         title="Sabueso API",

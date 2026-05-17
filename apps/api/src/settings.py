@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     # pgmq queue name
     pgmq_queue: str = "investigation_queue"
 
+    # Vercel KV — second-layer rate limit (defense in depth, S-20).
+    # Empty values disable backend enforcement; Edge layer remains primary.
+    vercel_kv_rest_api_url: str = ""
+    vercel_kv_rest_api_token: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

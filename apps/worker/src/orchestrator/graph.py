@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, cast
 from langgraph.graph import END, START, StateGraph
 
 from ..llm.client import LLMClient
+from ..observability.tracing import traceable
 from ..prompts.loader import PromptLoader
 from .checkpointer import in_memory_checkpointer
 from .edges import fan_out
@@ -78,6 +79,7 @@ class GraphDeps:
     persist_dry_run: bool = False
 
 
+@traceable(name="sabueso.build_graph", run_type="chain")  # type: ignore[untyped-decorator]
 def build_graph(
     deps: GraphDeps,
     checkpointer: BaseCheckpointSaver[Any] | None = None,

@@ -1,0 +1,179 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to keep CI minutes under control.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PNPM_VERSION: "9.15.0"
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.12"
+  # Reproducible installs without writing back to the lockfile in CI.
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Detect which areas changed so we skip irrelevant matrix shards on PRs.
+  # -------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      api: ${{ steps.filter.outputs.api }}
+      worker: ${{ steps.filter.outputs.worker }}
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+      pdf: ${{ steps.filter.outputs.pdf }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+            api:
+              - 'apps/api/**'
+              - '.github/workflows/ci.yml'
+            worker:
+              - 'apps/worker/**'
+              - '.github/workflows/ci.yml'
+            pipeline:
+              - 'apps/pipeline/**'
+              - '.github/workflows/ci.yml'
+            pdf:
+              - 'apps/pdf/**'
+              - '.github/workflows/ci.yml'
+
+  # -------------------------------------------------------------------------
+  # Frontend (apps/web + packages/*): eslint + tsc + vitest.
+  # -------------------------------------------------------------------------
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter @sabueso/web lint
+
+      - name: Typecheck (web + packages)
+        run: pnpm turbo typecheck --filter=@sabueso/web --filter=./packages/*
+
+      - name: Test (vitest)
+        run: pnpm --filter @sabueso/web test
+
+  # -------------------------------------------------------------------------
+  # Python services (api, worker, pipeline, pdf): ruff + mypy + pytest.
+  # Matrix is parameterized by app — each shard only runs when its paths
+  # changed, so a PR that only touches the api won't spin up the worker shard.
+  # -------------------------------------------------------------------------
+  python:
+    needs: changes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            path: apps/api
+            run_if: ${{ needs.changes.outputs.api == 'true' }}
+            has_mypy: true
+            has_tests: true
+          - app: worker
+            path: apps/worker
+            run_if: ${{ needs.changes.outputs.worker == 'true' }}
+            has_mypy: true
+            has_tests: true
+          - app: pipeline
+            path: apps/pipeline
+            run_if: ${{ needs.changes.outputs.pipeline == 'true' }}
+            has_mypy: true
+            has_tests: true
+          - app: pdf
+            path: apps/pdf
+            run_if: ${{ needs.changes.outputs.pdf == 'true' }}
+            has_mypy: false
+            has_tests: false
+    name: python (${{ matrix.app }})
+    steps:
+      - if: matrix.run_if == 'true'
+        uses: actions/checkout@v4
+
+      - if: matrix.run_if == 'true'
+        name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "${{ matrix.path }}/uv.lock"
+
+      - if: matrix.run_if == 'true'
+        name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+        working-directory: ${{ matrix.path }}
+
+      - if: matrix.run_if == 'true'
+        name: Install dependencies (sync + dev extras)
+        run: uv sync --all-extras
+        working-directory: ${{ matrix.path }}
+
+      - if: matrix.run_if == 'true'
+        name: Lint (ruff)
+        run: uv run ruff check .
+        working-directory: ${{ matrix.path }}
+
+      - if: matrix.run_if == 'true' && matrix.has_mypy
+        name: Typecheck (mypy)
+        run: uv run mypy .
+        working-directory: ${{ matrix.path }}
+
+      - if: matrix.run_if == 'true' && matrix.has_tests
+        name: Test (pytest)
+        run: uv run pytest -q
+        working-directory: ${{ matrix.path }}
+
+  # -------------------------------------------------------------------------
+  # Synthesis job — branch protection should require this single job, which
+  # in turn requires that every needed shard ran (or was skipped because no
+  # paths matched). Keeps the required-checks list short.
+  # -------------------------------------------------------------------------
+  ci-ok:
+    needs: [frontend, python]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded or were skipped
+        run: |
+          fail=0
+          for r in "${{ needs.frontend.result }}" "${{ needs.python.result }}"; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "Required job result was '$r'"
+              fail=1
+            fi
+          done
+          exit $fail

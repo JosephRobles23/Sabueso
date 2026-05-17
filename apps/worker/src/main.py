@@ -34,57 +34,11 @@ from .tools.registry import load_pe_tools
 DEFAULT_COUNTRY = "pe"
 DEFAULT_LOCALE = "es"
 
-
-def _configure_logging() -> None:
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso", utc=True),
-            structlog.processors.JSONRenderer(),
-        ]
-    )
+from src.observability import configure_langsmith, configure_logging
 
 
-async def _fetch_investigation_row(
-    pool: asyncpg.Pool,
-    investigation_id: str,
-) -> dict[str, Any] | None:
-    row = await pool.fetchrow(
-        """
-        SELECT id, target_entity_id, country, locale, status, user_id
-        FROM investigations
-        WHERE id = $1
-        """,
-        investigation_id,
-    )
-    return dict(row) if row else None
-
-
-async def _mark_failed(
-    pool: asyncpg.Pool,
-    investigation_id: str,
-    error: str,
-) -> None:
-    try:
-        await pool.execute(
-            """
-            UPDATE investigations
-            SET status = 'failed', finished_at = now()
-            WHERE id = $1
-            """,
-            investigation_id,
-        )
-    except Exception as exc:  # pragma: no cover - defensive logging path
-        structlog.get_logger("sabueso.worker").error(
-            "worker.mark_failed_error",
-            investigation_id=investigation_id,
-            error=str(exc),
-            original_error=error,
-        )
-
-
-async def run_async() -> int:
+def run() -> int:
+    _configure_logging()
     log = structlog.get_logger("sabueso.worker")
 
     investigation_id = os.environ.get("INVESTIGATION_ID")

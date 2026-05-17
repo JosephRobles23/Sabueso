@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(uv run *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(uv sync *)",
+      "Bash(git *)"
     ]
   },
   "hooks": {

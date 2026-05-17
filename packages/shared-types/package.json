@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "generate:events": "pydantic2ts --module ../../apps/worker/src/events/schemas.py --output ./src/events.generated.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

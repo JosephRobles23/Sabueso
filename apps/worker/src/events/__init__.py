@@ -1,0 +1,47 @@
+"""Worker-side event emission for the SSE stream (S-08)."""
+
+from src.events.emitter import EventEmitter
+from src.events.schemas import (
+    AgentCallsign,
+    AgentFinishedPayload,
+    AgentStartedPayload,
+    ClaimCreatedPayload,
+    EdgeDiscoveredPayload,
+    EventPayload,
+    EventType,
+    HeartbeatPayload,
+    InvestigationCompletePayload,
+    InvestigationFailedPayload,
+    InvestigationStartedPayload,
+    PlanGeneratedPayload,
+    PlanStep,
+    StreamedEvent,
+    SynthesisStartedPayload,
+    TERMINAL_EVENT_TYPES,
+    ToolCallPayload,
+    VerificationDonePayload,
+    validate_payload,
+)
+
+__all__ = [
+    "AgentCallsign",
+    "AgentFinishedPayload",
+    "AgentStartedPayload",
+    "ClaimCreatedPayload",
+    "EdgeDiscoveredPayload",
+    "EventEmitter",
+    "EventPayload",
+    "EventType",
+    "HeartbeatPayload",
+    "InvestigationCompletePayload",
+    "InvestigationFailedPayload",
+    "InvestigationStartedPayload",
+    "PlanGeneratedPayload",
+    "PlanStep",
+    "StreamedEvent",
+    "SynthesisStartedPayload",
+    "TERMINAL_EVENT_TYPES",
+    "ToolCallPayload",
+    "VerificationDonePayload",
+    "validate_payload",
+]

@@ -11,7 +11,13 @@ from src.auth.jwks import JWKSCache
 from src.auth.middleware import AuthMiddleware
 from src.db.pool import create_pool
 from src.observability.logging import configure_logging
-from src.routes import entities_router, health_router, investigate_router, search_router
+from src.routes import (
+    entities_router,
+    health_router,
+    investigate_router,
+    search_router,
+    stream_router,
+)
 from src.settings import Settings, get_settings
 
 log = structlog.get_logger(__name__)
@@ -78,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(investigate_router, prefix=prefix)
     app.include_router(search_router, prefix=prefix)
     app.include_router(entities_router, prefix=prefix)
+    app.include_router(stream_router, prefix=prefix)
 
     return app
 

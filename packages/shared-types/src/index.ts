@@ -1,6 +1,9 @@
 // Sabueso shared types — generated from Pydantic schemas + manual additions
 // This file is the entry point for all types shared between frontend and backend
 
+import type { EventType } from "./events";
+export * from "./events";
+
 export type Country = "pe" | "cl" | "mx" | "sv";
 export type EntityType = "person" | "company" | "government_entity" | "contract";
 export type InvestigationStatus =
@@ -25,19 +28,7 @@ export type InvestigatorCallsign =
 
 export type AgentStatus = "idle" | "thinking" | "working" | "blocked" | "done";
 
-export type EventType =
-  | "investigation_started"
-  | "plan_generated"
-  | "agent_started"
-  | "tool_call"
-  | "claim_created"
-  | "edge_discovered"
-  | "agent_finished"
-  | "verification_done"
-  | "synthesis_started"
-  | "investigation_complete"
-  | "investigation_failed"
-  | "heartbeat";
+// EventType is re-exported from ./events (the canonical SSE event contract).
 
 export interface Entity {
   id: string;

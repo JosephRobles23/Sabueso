@@ -14,6 +14,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "httpx>=0.28.0",
     "structlog>=24.4.0",
+    "sse-starlette>=2.1.0",
 ]
 
 [project.optional-dependencies]
@@ -21,10 +22,6 @@ dependencies = [
 gcp = [
     "google-auth>=2.36.0",
     "google-cloud-run>=0.10.0",
-]
-# S-08 SSE streaming.
-sse = [
-    "sse-starlette>=2.1.0",
 ]
 dev = [
     "pytest>=8.3.0",
@@ -36,6 +33,7 @@ dev = [
     "freezegun>=1.5.0",
     "respx>=0.21.0",
     "cryptography>=42.0.0",
+    "pydantic-to-typescript>=2.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]

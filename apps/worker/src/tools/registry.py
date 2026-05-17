@@ -26,6 +26,9 @@ El registry:
 - envuelve la llamada con ``cached_tool_call``
 - expone ``call(country, name, args)`` para el orchestrator
 - expone ``export_as_mcp()`` con el manifest JSON-Schema válido
+
+También acepta tools ligeras (sin Pydantic) vía ``register_tool`` / ``register`` sin
+``input_model`` — usadas por tests de ``BaseInvestigator``.
 """
 
 from __future__ import annotations
@@ -43,7 +46,9 @@ from .errors import InvalidInputError, ToolError
 InputT = TypeVar("InputT", bound=BaseModel)
 OutputT = TypeVar("OutputT", bound=BaseModel)
 
-Handler = Callable[[Any], Awaitable[BaseModel]]
+TypedHandler = Callable[[Any], Awaitable[BaseModel]]
+KwargHandler = Callable[..., Awaitable[Any]]
+Handler = TypedHandler | KwargHandler
 
 
 @dataclass
@@ -52,12 +57,14 @@ class ToolDef(Generic[InputT, OutputT]):  # noqa: UP046  # dataclass + PEP 695 c
 
     name: str
     country: str
-    description: str
-    input_model: type[InputT]
-    output_model: type[OutputT]
     handler: Handler
+    description: str = ""
+    input_model: type[InputT] | None = None
+    output_model: type[OutputT] | None = None
     cache_ttl: int = 3600
     tags: tuple[str, ...] = field(default_factory=tuple)
+    _input_schema: dict[str, Any] = field(default_factory=dict, repr=False)
+    _output_schema: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def qualified_name(self) -> str:
@@ -65,26 +72,18 @@ class ToolDef(Generic[InputT, OutputT]):  # noqa: UP046  # dataclass + PEP 695 c
 
     @property
     def input_schema(self) -> dict[str, Any]:
-        return _sanitize_schema(self.input_model.model_json_schema())
+        if self.input_model is not None:
+            return _sanitize_schema(self.input_model.model_json_schema())
+        return self._input_schema
 
     @property
     def output_schema(self) -> dict[str, Any]:
-        return _sanitize_schema(self.output_model.model_json_schema())
+        if self.output_model is not None:
+            return _sanitize_schema(self.output_model.model_json_schema())
+        return self._output_schema
 
     def to_mcp(self) -> dict[str, Any]:
-        """Forma compatible con MCP Tool object spec.
-
-        Spec mínimo de MCP::
-
-            {
-              "name": str,
-              "description": str,
-              "inputSchema": <JSON Schema object>
-            }
-
-        Agregamos ``outputSchema`` (extensión bien soportada) y metadata
-        ``x-sabueso`` para country/cache_ttl.
-        """
+        """Forma compatible con MCP Tool object spec."""
         return {
             "name": self.name,
             "description": (self.description or "").strip(),
@@ -108,35 +107,44 @@ class ToolRegistry:
         cls,
         *,
         country: str,
-        input_model: type[InputT],
-        output_model: type[OutputT],
+        input_model: type[InputT] | None = None,
+        output_model: type[OutputT] | None = None,
+        name: str | None = None,
+        description: str = "",
+        input_schema: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
         cache_ttl: int = 3600,
         tags: tuple[str, ...] = (),
     ) -> Callable[[Handler], Handler]:
-        """Decorator. ``handler`` recibe una instancia de ``input_model``.
-
-        El nombre de la tool es ``func.__name__``. La descripción es
-        ``func.__doc__`` (primer párrafo).
-        """
+        """Decorator. Con modelos Pydantic valida input; sin ellos acepta **kwargs."""
 
         def decorator(func: Handler) -> Handler:
             if not inspect.iscoroutinefunction(func):
                 raise TypeError(f"tool handler {func.__name__} must be async")
-            description = inspect.getdoc(func) or func.__name__
+            tool_name = name or func.__name__
+            tool_description = (
+                description or inspect.getdoc(func) or func.__name__
+            ).strip()
             tool = ToolDef(
-                name=func.__name__,
+                name=tool_name,
                 country=country,
-                description=description,
+                description=tool_description,
                 input_model=input_model,
                 output_model=output_model,
                 handler=func,
                 cache_ttl=cache_ttl,
                 tags=tags,
+                _input_schema=input_schema or {},
+                _output_schema=output_schema or {},
             )
             cls._tools[tool.qualified_name] = tool
             return func
 
         return decorator
+
+    @classmethod
+    def register_tool(cls, tool: ToolDef[Any, Any]) -> None:
+        cls._tools[tool.qualified_name] = tool
 
     @classmethod
     def get(cls, country: str, name: str) -> ToolDef[Any, Any]:
@@ -149,8 +157,7 @@ class ToolRegistry:
     def get_tools_for(
         cls, country: str, allowed: list[str] | None = None
     ) -> list[ToolDef[Any, Any]]:
-        """Retorna tools del país pedido. Si ``allowed`` se pasa, filtra por
-        nombre (no fully-qualified)."""
+        """Retorna tools del país pedido. Si ``allowed`` se pasa, filtra por nombre."""
         country_tools = [t for t in cls._tools.values() if t.country == country]
         if allowed is None:
             return country_tools
@@ -188,6 +195,12 @@ class ToolRegistry:
     ) -> BaseModel:
         """Invoca la tool con cache. Punto de entrada del orchestrator."""
         tool = cls.get(country, name)
+        if tool.input_model is None or tool.output_model is None:
+            raise ToolError(
+                "tool has no input_model/output_model; use handler directly",
+                tool=tool.name,
+                country=tool.country,
+            )
         try:
             payload = tool.input_model.model_validate(args)
         except Exception as exc:
@@ -201,7 +214,7 @@ class ToolRegistry:
         cache_args = payload.model_dump(mode="json")
 
         async def _bound_handler(**_: Any) -> BaseModel:
-            return await tool.handler(payload)
+            return await tool.handler(payload)  # type: ignore[misc]
 
         try:
             return await cached_tool_call(
@@ -224,16 +237,19 @@ class ToolRegistry:
             ) from exc
 
     @classmethod
-    def _reset(cls) -> None:
+    def clear(cls) -> None:
         """Test helper. No usar en runtime."""
         cls._tools.clear()
+
+    @classmethod
+    def _reset(cls) -> None:
+        """Alias de ``clear`` para tests S-04."""
+        cls.clear()
 
 
 def _sanitize_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Limpia campos no estándar que Pydantic agrega y MCP no espera."""
     cleaned = dict(schema)
-    # Pydantic agrega "title" en cada nivel; lo dejamos arriba pero limpiamos
-    # el resto para que el manifest se vea ordenado.
     cleaned.pop("$defs", None) if "$defs" not in cleaned else None
     return cleaned
 

@@ -1,0 +1,71 @@
+/* Print stylesheet for /i/[id]/dossier — A4, sin sidebars, sin nav.
+   Aplicado vía `import "./print.css"` desde page.tsx. */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  /* La barra de navegación, toggles, y cualquier UI marcada como print-hide
+     queda fuera del PDF para no robar márgenes ni tinta. */
+  nav,
+  [data-print-hide],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Layout sin contención: el dossier ocupa el ancho útil de la página A4. */
+  main,
+  .dossier {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .dossier-header {
+    border-bottom: 1px solid #000 !important;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: underline;
+  }
+
+  /* Resolver URLs en papel — el lector necesita la fuente, no solo el ancla. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #555;
+    word-break: break-all;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    page-break-after: avoid;
+    color: #000 !important;
+  }
+
+  p,
+  li,
+  blockquote,
+  figure,
+  pre {
+    page-break-inside: avoid;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+}

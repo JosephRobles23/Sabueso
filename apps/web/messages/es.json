@@ -1,0 +1,58 @@
+{
+  "common": {
+    "appName": "Sabueso",
+    "tagline": "Tras la pista de la corrupción",
+    "login": "Ingresar",
+    "logout": "Cerrar sesión",
+    "language": "Idioma",
+    "theme": "Tema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema",
+    "back": "Volver",
+    "share": "Compartir",
+    "search": "Buscar",
+    "loading": "Cargando..."
+  },
+  "marketing": {
+    "title": "Sabueso",
+    "subtitle": "Una redacción de investigación periodística que nunca duerme.",
+    "description": "Siete investigadores de IA cruzan registros públicos en vivo para auditar funcionarios en LATAM.",
+    "ctaPrimary": "Empezar una investigación",
+    "ctaSecondary": "Cómo funciona",
+    "featuresTitle": "El equipo",
+    "feature1": "Sabueso orquesta. Los siete investigan. La Jueza verifica.",
+    "feature2": "Cada hallazgo trae fuente pública, fecha y un puntaje de confianza.",
+    "feature3": "El dossier se publica como PDF citado, listo para sala de redacción."
+  },
+  "app": {
+    "home": "Inicio",
+    "searchPlaceholder": "Investiga a un funcionario, candidato o RUC...",
+    "searchHint": "Ej: \"Vladimir Cerrón\", \"RUC 20100070970\"",
+    "trending": "Sugerencias en tendencia hoy",
+    "recent": "Tus investigaciones recientes",
+    "noResults": "Sin resultados todavía. Probá otra búsqueda.",
+    "noRecent": "Aún no tenés investigaciones. Empezá con una búsqueda arriba.",
+    "openInvestigation": "Abrir investigación",
+    "kbdHint": "⌘K"
+  },
+  "investigation": {
+    "missionControl": "Mission Control",
+    "investigationFloor": "Investigation Floor",
+    "dossier": "Dossier",
+    "preparing": "Preparando investigación...",
+    "loadingPlan": "El equipo se está armando.",
+    "loadingFloor": "Esperando los primeros hallazgos.",
+    "loadingDossier": "El dossier se va a llenar en tiempo real."
+  },
+  "auth": {
+    "loginTitle": "Ingresá a Sabueso",
+    "loginSubtitle": "Magic link al mail o cuenta de Google.",
+    "email": "Correo electrónico",
+    "emailPlaceholder": "tu@correo.com",
+    "sendMagicLink": "Enviar magic link",
+    "continueWithGoogle": "Continuar con Google",
+    "anonymousHint": "También podés navegar sin cuenta.",
+    "magicSent": "Te mandamos un enlace al correo. Revisá la bandeja."
+  }
+}

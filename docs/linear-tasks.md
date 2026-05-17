@@ -582,7 +582,7 @@ Levantar la app Next 16 con todas las capas base: routing, i18n, autenticación 
 - `apps/web/lib/{api,supabase/client,supabase/server,sse,kv,localStorage}.ts`
 - `apps/web/hooks/{useUser,useInvestigation,useLocalStorageInvestigation,useLocale}.ts`
 - `apps/web/i18n.ts`, `apps/web/messages/{es,en}.json`
-- `apps/web/middleware.ts` (i18n routing)
+- `apps/web/proxy.ts` (Next 16 proxy: Supabase session refresh + i18n routing; reemplaza al deprecado `middleware.ts`)
 - `apps/web/tailwind.config.ts`, `apps/web/app/globals.css`
 
 **Technical notes:**
@@ -1299,7 +1299,7 @@ Cerrar el sistema con todos los aspectos cross-cutting + preparación del pitch 
 - Cost tracking per investigation visible en `investigations.cost_usd`
 
 **Security & rate limit:**
-- Middleware Next.js (`apps/web/middleware.ts`) con Vercel KV INCR + TTL
+- Proxy Next 16 (`apps/web/proxy.ts`, ex-`middleware.ts`) con Vercel KV INCR + TTL
 - Limits: 10/IP anónima/24h, 50/user autenticado/24h, 300 search/IP/hour, 20 export-pdf/IP/24h
 - 429 con Retry-After header
 - Double-check rate limit en FastAPI service (Vercel KV REST API)
@@ -1339,7 +1339,7 @@ Cerrar el sistema con todos los aspectos cross-cutting + preparación del pitch 
 - [ ] Easter egg footer "🐕‍🦺 Construido en 4 días con Emdash + Claude + Kimi"
 
 **Files:**
-- `apps/web/middleware.ts`
+- `apps/web/proxy.ts` (Next 16 proxy)
 - `apps/api/src/auth/rate_limit.py`
 - `apps/api/src/observability/{logging,tracing,metrics}.py`
 - `apps/web/next.config.js` (CSP headers)

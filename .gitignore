@@ -54,7 +54,9 @@ service-account-key.json
 # Generated
 *.generated.ts
 *.generated.json
+tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
 *.swp
+.claude/settings.local.json

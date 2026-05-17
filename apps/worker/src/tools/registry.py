@@ -268,6 +268,7 @@ def load_pe_tools() -> None:
         news,
         relatives,
         seace,
+        stubs,
         sunarp,
     )
 

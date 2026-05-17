@@ -2,6 +2,7 @@
 
 from src.events.emitter import EventEmitter
 from src.events.schemas import (
+    TERMINAL_EVENT_TYPES,
     AgentCallsign,
     AgentFinishedPayload,
     AgentStartedPayload,
@@ -17,7 +18,6 @@ from src.events.schemas import (
     PlanStep,
     StreamedEvent,
     SynthesisStartedPayload,
-    TERMINAL_EVENT_TYPES,
     ToolCallPayload,
     VerificationDonePayload,
     validate_payload,

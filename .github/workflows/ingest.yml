@@ -1,0 +1,60 @@
+name: ingest
+
+# Disparo manual desde GitHub UI: Actions → ingest → Run workflow.
+# Dispara el Cloud Run Job `pipeline-ingest` con el flow elegido.
+
+on:
+  workflow_dispatch:
+    inputs:
+      flow:
+        description: 'Flow a ejecutar'
+        type: choice
+        required: true
+        default: 'all'
+        options:
+          - all
+          - pe_legalize
+          - pe_seace
+          - pe_jne_pdfs
+      country:
+        description: 'Código país (informativo; los flows pe_* son PE)'
+        type: choice
+        required: true
+        default: 'pe'
+        options:
+          - pe
+          - cl
+          - mx
+          - sv
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'southamerica-east1' }}
+  JOB_NAME: pipeline-ingest
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar GCP (Workload Identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Ejecutar Cloud Run Job
+        run: |
+          set -euo pipefail
+          gcloud run jobs execute "${JOB_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --update-env-vars="PIPELINE_FLOW=${{ github.event.inputs.flow }},PIPELINE_COUNTRY=${{ github.event.inputs.country }}" \
+            --wait

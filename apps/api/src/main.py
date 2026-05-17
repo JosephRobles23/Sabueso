@@ -13,6 +13,7 @@ from src.auth.rate_limit import build_kv_client
 from src.db.pool import create_pool
 from src.observability.logging import configure_logging
 from src.routes import (
+    configs_router,
     entities_router,
     health_router,
     investigate_router,
@@ -94,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(search_router, prefix=prefix)
     app.include_router(entities_router, prefix=prefix)
     app.include_router(stream_router, prefix=prefix)
+    app.include_router(configs_router, prefix=prefix)
 
     return app
 

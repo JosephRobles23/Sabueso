@@ -6,9 +6,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.auth.current_user import CurrentUser, get_current_user
-from src.deps import InvestigationServiceDep
-from src.models.investigation import InvestigationCreate, InvestigationCreated
-from src.services.rate_limit import allow_request
+from src.auth.rate_limit import enforce_rate_limit
+from src.db.repository.investigations import InvestigationRepo
+from src.deps import InvestigationServiceDep, get_investigation_repo
+from src.models.investigation import (
+    Investigation,
+    InvestigationCreate,
+    InvestigationCreated,
+)
 
 router = APIRouter(tags=["investigations"])
 

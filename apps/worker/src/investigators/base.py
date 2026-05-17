@@ -379,7 +379,14 @@ class BaseInvestigator(ABC):
             raise ToolPermissionError(
                 f"{call.tool!r} not registered for country {self.country!r}"
             )
-        result = tool.handler(**call.args)
+        # Tools registered with a Pydantic input_model expect a single
+        # positional payload (e.g. `search_seace_contracts(payload: SeaceInput)`).
+        # Tools without input_model use kwargs convention (legacy tests).
+        if tool.input_model is not None:
+            payload = tool.input_model.model_validate(call.args)
+            result = tool.handler(payload)
+        else:
+            result = tool.handler(**call.args)
         if asyncio.iscoroutine(result):
             result = await result
         return result

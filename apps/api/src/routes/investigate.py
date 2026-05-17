@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.auth.current_user import CurrentUser, get_current_user
-from src.deps import InvestigationServiceDep
-from src.models.investigation import InvestigationCreate, InvestigationCreated
+from src.db.repository.investigations import InvestigationRepo
+from src.deps import InvestigationServiceDep, get_investigation_repo
+from src.models.investigation import (
+    Investigation,
+    InvestigationCreate,
+    InvestigationCreated,
+)
 from src.services.rate_limit import allow_request
 
 router = APIRouter(tags=["investigations"])
@@ -29,3 +37,16 @@ async def create_investigation(
         payload=payload,
         user_id=user.id if user else None,
     )
+
+
+@router.get("/investigations/{investigation_id}", response_model=Investigation)
+async def get_investigation(
+    investigation_id: UUID,
+    repo: Annotated[InvestigationRepo, Depends(get_investigation_repo)],
+) -> Investigation:
+    """Snapshot del estado de una investigación. Lo usa el smoke test (S-10)
+    para verificar `status='complete'` después de drenar el SSE."""
+    investigation = await repo.get(investigation_id)
+    if investigation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="investigation not found")
+    return investigation

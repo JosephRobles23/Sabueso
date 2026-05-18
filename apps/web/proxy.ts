@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createServerClient } from "@/lib/supabase/proxy";
-import { rateLimitEdge } from "./middleware";
+import { rateLimitEdge } from "@/lib/rate-limit";
 
 /**
  * Next 16 proxy (formerly `middleware`).
@@ -10,7 +10,7 @@ import { rateLimitEdge } from "./middleware";
  *   1. Edge rate-limit (Vercel KV) — 429 short-circuit if over budget.
  *   2. Supabase session refresh so Server Components see an up-to-date user.
  *
- * The rate-limit logic lives in ./middleware.ts so it can be unit-tested in
+ * The rate-limit logic lives in @/lib/rate-limit so it can be unit-tested in
  * isolation and reused server-side from API routes.
  */
 export async function proxy(request: NextRequest) {

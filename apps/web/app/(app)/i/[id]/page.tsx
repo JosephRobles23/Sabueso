@@ -1,12 +1,15 @@
-import { getTranslations } from "next-intl/server";
+import { getTranslations } from "next-intl/server"
 
-import { InvestigationShell } from "./shell";
+import { InvestigationShell } from "./shell"
+import { getDemoMockState } from "@/lib/mocks"
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = { params: Promise<{ id: string }> }
 
 export default async function InvestigationPage({ params }: PageProps) {
-  const { id } = await params;
-  const t = await getTranslations("investigation");
+  const { id } = await params
+  const t = await getTranslations("investigation")
+
+  const mockState = getDemoMockState(id)
 
   return (
     <InvestigationShell
@@ -20,6 +23,7 @@ export default async function InvestigationPage({ params }: PageProps) {
         loadingDossier: t("loadingDossier"),
         preparing: t("preparing"),
       }}
+      state={mockState ?? undefined}
     />
-  );
+  )
 }

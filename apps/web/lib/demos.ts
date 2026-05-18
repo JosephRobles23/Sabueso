@@ -48,7 +48,7 @@ export const DEMO_TARGETS: DemoTarget[] = [
     categoryLabel: "Candidato 2026",
     caseLine: "Caso Cócteles — aportes no declarados a campañas",
     country: "pe",
-    investigation_id: "",
+    investigation_id: "demo-keiko-fujimori",
     video_url: "",
   },
   {

@@ -60,6 +60,10 @@ export interface PreviewModeWarningPayload {
   available_investigators: InvestigatorCallsign[]
   available_sources: string[]
   reason: PreviewWarningReason
+  /** Investigadores que se ejecutarán (subset del set completo). */
+  active_investigators: InvestigatorCallsign[]
+  /** Mensaje user-facing opcional. */
+  message?: string | null
 }
 
 export interface AgentStartedPayload {
@@ -140,16 +144,6 @@ export interface HeartbeatPayload {
   ts: string
 }
 
-export interface PreviewModeWarningPayload {
-  type: "preview_mode_warning"
-  country: Country
-  /** Lista de fuentes/tools disponibles para el país en preview. */
-  available_sources: string[]
-  /** Investigadores que se ejecutarán (subset del set completo). */
-  active_investigators: InvestigatorCallsign[]
-  /** Mensaje user-facing opcional. */
-  message?: string | null
-}
 
 export type EventPayload =
   | InvestigationStartedPayload
@@ -164,7 +158,6 @@ export type EventPayload =
   | SynthesisStartedPayload
   | InvestigationCompletePayload
   | InvestigationFailedPayload
-  | PreviewModeWarningPayload
   | HeartbeatPayload
 
 // SSE wire envelope — what the EventSource ``message`` callback receives in
@@ -192,6 +185,5 @@ export type PayloadByType = {
   synthesis_started: SynthesisStartedPayload
   investigation_complete: InvestigationCompletePayload
   investigation_failed: InvestigationFailedPayload
-  preview_mode_warning: PreviewModeWarningPayload
   heartbeat: HeartbeatPayload
 }

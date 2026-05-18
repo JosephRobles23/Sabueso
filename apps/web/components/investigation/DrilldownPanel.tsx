@@ -33,6 +33,7 @@ const EVENT_BORDER: Record<EventType, string> = {
   synthesis_started: "var(--color-accent)",
   investigation_complete: "var(--color-declared)",
   investigation_failed: "var(--color-suspicious)",
+  preview_mode_warning: "var(--color-ambiguous)",
   heartbeat: "var(--color-text-muted)",
 };
 
@@ -48,6 +49,7 @@ const EVENT_LABEL: Record<EventType, string> = {
   synthesis_started: "síntesis",
   investigation_complete: "completa",
   investigation_failed: "falló",
+  preview_mode_warning: "modo preview",
   heartbeat: "heartbeat",
 };
 

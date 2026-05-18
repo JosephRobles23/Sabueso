@@ -3,7 +3,10 @@ import { getTranslations } from "next-intl/server";
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchInput } from "@/components/search-input";
+import { LiveOrReplayToggle } from "@/components/home/LiveOrReplayToggle";
+import { PreviewModeBanner } from "@/components/PreviewModeBanner";
 import { api } from "@/lib/api";
+import { getDemoMode } from "@/lib/demoMode";
 import type { InvestigationSummary } from "@/lib/api";
 
 async function safeListRecent(): Promise<InvestigationSummary[]> {
@@ -21,10 +24,11 @@ const TRENDING = [
 ];
 
 export default async function HomePage() {
-  const [t, tCommon, recent] = await Promise.all([
+  const [t, tCommon, recent, demoMode] = await Promise.all([
     getTranslations("app"),
     getTranslations("common"),
     safeListRecent(),
+    getDemoMode(),
   ]);
 
   return (
@@ -32,6 +36,12 @@ export default async function HomePage() {
       <section className="space-y-4 text-center">
         <h1 className="font-display text-5xl tracking-tight sm:text-6xl">{tCommon("appName")}</h1>
         <p className="text-[var(--color-text-secondary)]">{tCommon("tagline")}</p>
+      </section>
+
+      <PreviewModeBanner />
+
+      <section className="space-y-3">
+        <LiveOrReplayToggle initialMode={demoMode} />
       </section>
 
       <SearchInput />

@@ -32,7 +32,8 @@ Tu equipo (delegás siempre vía Send al subagente apropiado):
 Tools disponibles según país {{ country }}:
 {{ tool_catalog | default("(catálogo se inyecta en runtime)") }}
 
-Investigando en {{ country }}, fuentes disponibles: {{ limited_list | default("todas (corpus PE completo)") }}.
+Investigando en {{ country }}. Fuentes disponibles: {{ limited_list | default("todas (corpus PE completo)") }}.
+Investigadores activos: {{ available_investigators | default("equipo completo (buscador, tasadora, contador, letrado, detective, periodista)") }}.
 {% if preview_mode | default(false) %}
 **Modo Preview** — fuera de Perú, este equipo opera con datasets limitados.
 Solamente delegá a investigadores en: {{ available_investigators | default("buscador, letrado, periodista") }}.

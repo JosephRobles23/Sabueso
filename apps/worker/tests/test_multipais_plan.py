@@ -2,10 +2,14 @@
 
 Acceptance criteria del task:
 - ``state.country != "pe"`` → plan filtrado a buscador + letrado + periodista.
-- ``preview_mode_warning`` event con ``{country, available_investigators}``.
-- Para ``country == "pe"`` el comportamiento queda intacto.
-- El prompt loader recibe ``limited_list``, ``preview_mode`` y
-  ``available_investigators`` para que el system message refleje el modo.
+- ``preview_mode_warning`` event con ``{country, available_investigators,
+  available_sources, reason}`` y callsigns "el-*" como el resto del SSE.
+- Para ``country == "pe"`` el plan completo (6 investigadores) queda intacto
+  y NO se emite preview_mode_warning.
+- El user message del LLM lleva la restricción dura (catálogo limitado +
+  lista negra de Tasadora/Contador/Detective).
+- El system message renderizado incluye ``limited_list`` y la nota de Modo
+  Preview cuando ``country != "pe"``.
 """
 
 from __future__ import annotations
@@ -168,8 +172,13 @@ async def test_plan_cl_filters_to_preview_subset(plan_with_all_six: str):
 
     warning = next(e for e in result["events"] if e["type"] == "preview_mode_warning")
     assert warning["payload"]["country"] == "cl"
-    assert warning["payload"]["available_investigators"] == list(PREVIEW_INVESTIGATORS)
+    assert warning["payload"]["available_investigators"] == [
+        "el-buscador",
+        "el-letrado",
+        "el-periodista",
+    ]
     assert warning["payload"]["available_sources"]
+    assert warning["payload"]["reason"] == "limited_data_sources"
 
 
 @pytest.mark.asyncio
@@ -221,3 +230,97 @@ async def test_plan_renders_prompt_with_limited_list(plan_with_all_six: str):
     assert "Modo Preview" in rendered
     assert "BCN" in rendered  # parte de _source_summary("cl")
     assert "buscador, letrado, periodista" in rendered
+
+
+@pytest.mark.asyncio
+async def test_plan_user_message_carries_hard_constraint(plan_with_all_six: str):
+    """En preview el user prompt debe incluir la restricción dura textual."""
+    llm = _StubLLM({"anthropic/claude-sonnet-4.6": [plan_with_all_six]})
+    node = make_plan_node(PlanDeps(llm=llm, prompt_loader=PromptLoader()))
+
+    await node(
+        {
+            "investigation_id": str(uuid.uuid4()),
+            "target_entity_id": str(uuid.uuid4()),
+            "country": "mx",
+            "locale": "es",
+        }
+    )
+
+    _model, messages = llm._calls[0]
+    user_msg = messages[1]["content"]
+    assert "RESTRICCIÓN DURA" in user_msg
+    assert "Plan reducido. Disponibles para mx" in user_msg
+    assert "NO uses la-tasadora, el-contador ni el-detective" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_plan_user_message_has_no_constraint_in_pe(plan_with_all_six: str):
+    """En PE el user prompt NO debe inyectar la restricción dura."""
+    llm = _StubLLM({"anthropic/claude-sonnet-4.6": [plan_with_all_six]})
+    node = make_plan_node(PlanDeps(llm=llm, prompt_loader=PromptLoader()))
+
+    await node(
+        {
+            "investigation_id": str(uuid.uuid4()),
+            "target_entity_id": str(uuid.uuid4()),
+            "country": "pe",
+            "locale": "es",
+        }
+    )
+
+    _model, messages = llm._calls[0]
+    user_msg = messages[1]["content"]
+    assert "RESTRICCIÓN DURA" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_preview_warning_payload_validates_against_schema(
+    plan_with_all_six: str,
+):
+    """El payload del evento debe parsear contra PreviewModeWarningPayload."""
+    from src.events.schemas import PreviewModeWarningPayload  # noqa: PLC0415
+
+    llm = _StubLLM({"anthropic/claude-sonnet-4.6": [plan_with_all_six]})
+    node = make_plan_node(PlanDeps(llm=llm, prompt_loader=PromptLoader()))
+
+    result = await node(
+        {
+            "investigation_id": str(uuid.uuid4()),
+            "target_entity_id": str(uuid.uuid4()),
+            "country": "sv",
+            "locale": "es",
+        }
+    )
+
+    warning = next(e for e in result["events"] if e["type"] == "preview_mode_warning")
+    payload = PreviewModeWarningPayload.model_validate(warning["payload"])
+    assert payload.country == "sv"
+    assert payload.reason == "limited_data_sources"
+    assert payload.available_investigators == [
+        "el-buscador",
+        "el-letrado",
+        "el-periodista",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plan_cl_keeps_three_investigators_when_llm_returns_full_six(
+    plan_with_all_six: str,
+):
+    """country=cl + plan completo del LLM → plan final tiene sólo 3 investigadores."""
+    llm = _StubLLM({"anthropic/claude-sonnet-4.6": [plan_with_all_six]})
+    node = make_plan_node(PlanDeps(llm=llm, prompt_loader=PromptLoader()))
+
+    result = await node(
+        {
+            "investigation_id": str(uuid.uuid4()),
+            "target_entity_id": str(uuid.uuid4()),
+            "country": "cl",
+            "locale": "es",
+        }
+    )
+
+    assert len(result["plan"]) == 3
+    agents = {s["agent"] for s in result["plan"]}
+    assert agents == set(PREVIEW_INVESTIGATORS)

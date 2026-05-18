@@ -149,10 +149,11 @@ async def test_full_flow_country_cl_uses_three_investigators(
     assert warning is not None, "esperaba evento preview_mode_warning"
     assert warning["payload"]["country"] == "cl"
     assert warning["payload"]["available_investigators"] == [
-        "buscador",
-        "letrado",
-        "periodista",
+        "el-buscador",
+        "el-letrado",
+        "el-periodista",
     ]
+    assert warning["payload"]["reason"] == "limited_data_sources"
 
     # 3 claims (uno por investigador del subset), ninguno de Tasadora/Contador/Detective
     assert len(final_state["claims"]) == 3

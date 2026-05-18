@@ -11,6 +11,7 @@ import type { Country, InvestigatorCallsign } from "./index";
 export type EventType =
   | "investigation_started"
   | "plan_generated"
+  | "preview_mode_warning"
   | "agent_started"
   | "tool_call"
   | "claim_created"
@@ -47,6 +48,18 @@ export interface InvestigationStartedPayload {
 export interface PlanGeneratedPayload {
   type: "plan_generated"
   plan: PlanStep[]
+}
+
+export type PreviewWarningReason = "limited_data_sources"
+
+// Emitido por el plan node cuando state.country != "pe" (S-18). El frontend
+// lo renderiza como banner amarillo "Modo Preview · datos limitados".
+export interface PreviewModeWarningPayload {
+  type: "preview_mode_warning"
+  country: Exclude<Country, "pe">
+  available_investigators: InvestigatorCallsign[]
+  available_sources: string[]
+  reason: PreviewWarningReason
 }
 
 export interface AgentStartedPayload {
@@ -141,6 +154,7 @@ export interface PreviewModeWarningPayload {
 export type EventPayload =
   | InvestigationStartedPayload
   | PlanGeneratedPayload
+  | PreviewModeWarningPayload
   | AgentStartedPayload
   | ToolCallPayload
   | ClaimCreatedPayload
@@ -168,6 +182,7 @@ export interface StreamedEvent {
 export type PayloadByType = {
   investigation_started: InvestigationStartedPayload
   plan_generated: PlanGeneratedPayload
+  preview_mode_warning: PreviewModeWarningPayload
   agent_started: AgentStartedPayload
   tool_call: ToolCallPayload
   claim_created: ClaimCreatedPayload

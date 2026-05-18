@@ -6,7 +6,7 @@ import { SearchInput } from "@/components/search-input";
 import { LiveOrReplayToggle } from "@/components/home/LiveOrReplayToggle";
 import { PreviewModeBanner } from "@/components/PreviewModeBanner";
 import { api } from "@/lib/api";
-import { getDemoMode } from "@/lib/demoMode";
+import { getDemoMode } from "@/lib/demoMode.server";
 import type { InvestigationSummary } from "@/lib/api";
 
 async function safeListRecent(): Promise<InvestigationSummary[]> {

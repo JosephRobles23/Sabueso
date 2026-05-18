@@ -120,12 +120,11 @@ def make_plan_node(deps: PlanDeps) -> _Node:
                 "agent": "sabueso",
                 "payload": {
                     "country": country,
-                    "available_investigators": list(PREVIEW_INVESTIGATORS),
+                    "available_investigators": [
+                        _to_event_agent(c) for c in PREVIEW_INVESTIGATORS
+                    ],
                     "available_sources": SOURCE_CATALOG.get(country, []),
-                    "reason": (
-                        "datos limitados fuera de Perú; sólo se ejecutan "
-                        "buscador, letrado y periodista"
-                    ),
+                    "reason": "limited_data_sources",
                 },
             }
 
@@ -223,13 +222,32 @@ def _build_messages(
 
     system_msg = {"role": "system", "content": blocks}
 
+    country = state.get("country") or "pe"
+    preview = _is_preview(country)
+    constraint = ""
+    if preview:
+        # Constraint duro: el filtrado post-LLM ya garantiza el subset, pero
+        # repetirlo en el user message reduce tokens gastados en steps que
+        # van a ser descartados y deja el racional explícito en la traza.
+        constraint = (
+            "\n\nRESTRICCIÓN DURA (Modo Preview):\n"
+            f"- Plan reducido. Disponibles para {country}: el-buscador, "
+            "el-letrado, el-periodista.\n"
+            "- NO uses la-tasadora, el-contador ni el-detective: requieren "
+            "fuentes específicas de Perú (SUNARP, SEACE, find_relatives) "
+            "que no existen para este país.\n"
+            "- Cualquier step con esos agentes será descartado por el "
+            "orquestador.\n"
+        )
+
     user_payload = (
         "Genera el plan JSON para esta investigación.\n\n"
         f"- investigation_id: {state.get('investigation_id')}\n"
         f"- target_entity_id: {state.get('target_entity_id')}\n"
-        f"- country: {state.get('country')}\n"
+        f"- country: {country}\n"
         f"- locale: {state.get('locale', 'es')}\n"
-        f"- user_query: {state.get('user_query', '(ninguno)')}\n\n"
+        f"- user_query: {state.get('user_query', '(ninguno)')}"
+        f"{constraint}\n\n"
         "Responde estrictamente con JSON: "
         '{"plan": [{"agent": "<callsign>", "task": "<descripción>", "priority": 1}, ...]}'
     )

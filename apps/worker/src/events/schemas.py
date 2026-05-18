@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 EventType = Literal[
     "investigation_started",
     "plan_generated",
+    "preview_mode_warning",
     "agent_started",
     "tool_call",
     "claim_created",
@@ -68,6 +69,23 @@ class PlanStep(_Base):
 class PlanGeneratedPayload(_Base):
     type: Literal["plan_generated"] = "plan_generated"
     plan: list[PlanStep]
+
+
+PreviewWarningReason = Literal["limited_data_sources"]
+
+
+class PreviewModeWarningPayload(_Base):
+    """Emitido por el plan node cuando ``state.country != 'pe'`` (S-18).
+
+    El frontend lo renderiza como banner amarillo "Modo Preview · datos
+    limitados", explicando qué investigadores quedan activos.
+    """
+
+    type: Literal["preview_mode_warning"] = "preview_mode_warning"
+    country: Literal["cl", "mx", "sv"]
+    available_investigators: list[AgentCallsign]
+    available_sources: list[str] = Field(default_factory=list)
+    reason: PreviewWarningReason = "limited_data_sources"
 
 
 class AgentStartedPayload(_Base):
@@ -151,6 +169,7 @@ class HeartbeatPayload(_Base):
 EventPayload = Annotated[
     InvestigationStartedPayload
     | PlanGeneratedPayload
+    | PreviewModeWarningPayload
     | AgentStartedPayload
     | ToolCallPayload
     | ClaimCreatedPayload
@@ -168,6 +187,7 @@ EventPayload = Annotated[
 _PAYLOAD_BY_TYPE: dict[EventType, type[_Base]] = {
     "investigation_started": InvestigationStartedPayload,
     "plan_generated": PlanGeneratedPayload,
+    "preview_mode_warning": PreviewModeWarningPayload,
     "agent_started": AgentStartedPayload,
     "tool_call": ToolCallPayload,
     "claim_created": ClaimCreatedPayload,

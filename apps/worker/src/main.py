@@ -96,6 +96,8 @@ async def run_async() -> int:
         execution=os.environ.get("CLOUD_RUN_EXECUTION"),
     )
 
+    # Carga PE + CL + MX + SV (S-18) para que el ToolRegistry tenga los
+    # handlers de todos los países antes de instanciar investigadores.
     load_all_tools()
 
     pool = await asyncpg.create_pool(

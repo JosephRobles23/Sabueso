@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   BarChart3,
@@ -11,6 +12,7 @@ import {
   MoreHorizontal,
   Network,
   Share2,
+  WifiOff,
 } from "lucide-react";
 import type {
   AgentStatus,
@@ -24,6 +26,8 @@ import type {
 } from "@sabueso/shared-types";
 
 import { Button } from "@/components/ui/button";
+import { DirectorMode } from "@/components/director/DirectorMode";
+import { PreviewModeBanner } from "@/components/PreviewModeBanner";
 import {
   DossierPanel,
   DrilldownPanel,
@@ -34,7 +38,12 @@ import {
   TimelineScrubber,
   TimelineView,
 } from "@/components/investigation";
-import { useInvestigation, type InvestigationState } from "@/hooks/useInvestigation";
+import {
+  useInvestigation,
+  type InvestigationMode,
+  type InvestigationState,
+  type ReplayControls,
+} from "@/hooks/useInvestigation";
 import { useLocalStorageInvestigation } from "@/hooks/useLocalStorageInvestigation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
@@ -96,8 +105,11 @@ export interface InvestigationShellProps {
 }
 
 export function InvestigationShell({ id, labels, state: injectedState }: InvestigationShellProps) {
-  const liveState = useLiveComposedState(id, !injectedState);
-  const state = injectedState ?? liveState;
+  const searchParams = useSearchParams();
+  const mode: InvestigationMode = searchParams?.get("mode") === "replay" ? "replay" : "live";
+
+  const live = useLiveInvestigation(id, !injectedState, mode);
+  const state = injectedState ?? live.state;
 
   const [drillTarget, setDrillTarget] = React.useState<InvestigatorCallsign | null>(null);
   const [scrubTime, setScrubTime] = React.useState<Date | null>(null);
@@ -106,6 +118,7 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
 
   const isLive = !injectedState && state.status === "running";
   const isStreamingDossier = state.status === "synthesizing";
+  const isOffline = !injectedState && live.isOffline;
 
   // When the user clicks an event in TimelineView, switch back to graph mode
   // and align the scrubber to the claim's timestamp so the graph filters down
@@ -135,8 +148,11 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
         id={id}
         targetName={state.target_name || labels.preparing}
         progress={state.progress}
-        isLive={isLive}
+        isLive={isLive || mode === "replay"}
       />
+
+      {isOffline && <OfflineBanner />}
+      <PreviewModeBanner events={state.events} />
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-3 lg:px-6">
         {/* Three-panel layout — desktop only. Mobile stacks vertically. */}
@@ -229,7 +245,27 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
           if (!open) setDrillTarget(null);
         }}
       />
+
+      {mode === "replay" && live.replay && <DirectorMode controls={live.replay} />}
     </main>
+  );
+}
+
+function OfflineBanner() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-2 border-b border-[var(--color-border-default)] bg-[color-mix(in_srgb,var(--color-ambiguous)_18%,transparent)] px-4 py-1.5 text-xs text-[var(--color-text-primary)] lg:px-6"
+    >
+      <WifiOff className="h-3.5 w-3.5" aria-hidden />
+      <span>
+        <strong className="font-mono uppercase tracking-wider text-[10px]">
+          Modo offline
+        </strong>{" "}
+        — mostrando último estado guardado localmente. Reconectando…
+      </span>
+    </div>
   );
 }
 
@@ -449,16 +485,42 @@ function Header({
 
 const TYPE_SEMANTIC: GraphSemantic = "discovered";
 
-function useLiveComposedState(id: string, enabled: boolean): ComposedInvestigationState {
-  const { hydrated, save } = useLocalStorageInvestigation(enabled ? id : undefined);
-  const { state } = useInvestigation(enabled ? id : undefined, { initialState: hydrated });
+interface LiveInvestigationResult {
+  state: ComposedInvestigationState;
+  /** True cuando SSE no está abierto y tenemos un snapshot hidratado de localStorage. */
+  isOffline: boolean;
+  /** Non-null sólo cuando mode=replay y el player ya cargó. */
+  replay: ReplayControls | null;
+}
+
+function useLiveInvestigation(
+  id: string,
+  enabled: boolean,
+  mode: InvestigationMode,
+): LiveInvestigationResult {
+  // En replay mode no hidratamos desde localStorage (el snapshot del replay
+  // tiene que arrancar limpio) y tampoco guardamos (la cache local es para
+  // sesiones live, no para replays).
+  const liveOnly = enabled && mode === "live";
+  const { hydrated, save } = useLocalStorageInvestigation(liveOnly ? id : undefined);
+  const { state, replay } = useInvestigation(enabled ? id : undefined, {
+    initialState: liveOnly ? hydrated : null,
+    mode,
+  });
 
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!liveOnly) return;
     save?.(state);
-  }, [enabled, state, save]);
+  }, [liveOnly, state, save]);
 
-  return React.useMemo(() => deriveComposedState(id, state), [id, state]);
+  const composed = React.useMemo(() => deriveComposedState(id, state), [id, state]);
+
+  const isOffline =
+    liveOnly &&
+    Boolean(hydrated) &&
+    (state.connection === "reconnecting" || state.connection === "closed");
+
+  return { state: composed, isOffline, replay };
 }
 
 function deriveComposedState(

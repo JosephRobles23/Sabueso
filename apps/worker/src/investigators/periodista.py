@@ -61,7 +61,7 @@ class ElPeriodista(BaseInvestigator):
     callsign = "el-periodista"
     role = "news"
     color = "orange-500"
-    model = "moonshot/kimi-k2.6"
+    model = "anthropic/claude-sonnet-4.6"
     strategy = Strategy.REACT
     allowed_tools = ["search_news_archive", "wayback_machine", "search_twitter_archive"]
     system_prompt_path = "periodista"

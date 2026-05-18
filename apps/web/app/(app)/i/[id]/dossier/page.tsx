@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { getDemoMockState } from "@/lib/mocks";
 import type { Country, EntityType, InvestigationStatus } from "@sabueso/shared-types";
+
+import { DossierContent } from "./DossierContent";
 
 import "./print.css";
 
@@ -28,6 +29,21 @@ type DossierData = {
 };
 
 async function fetchDossier(id: string): Promise<DossierData | null> {
+  const mock = getDemoMockState(id);
+  if (mock && mock.dossier_md) {
+    return {
+      id: mock.id,
+      status: mock.status,
+      dossier_md: mock.dossier_md,
+      country: "pe",
+      progress_pct: mock.progress,
+      started_at: mock.events[0]?.created_at ?? new Date().toISOString(),
+      finished_at: mock.events[mock.events.length - 1]?.created_at ?? null,
+      entity: { name: mock.target_name, identifier: null, type: "person" },
+      claim_count: mock.claims.length,
+    };
+  }
+
   if (!UUID_RE.test(id)) return null;
   const supabase = await createServerClient();
   if (!supabase) return null;
@@ -131,20 +147,8 @@ export default async function DossierPage({ params }: { params: Promise<{ id: st
       </header>
 
       {data.status === "complete" && data.dossier_md ? (
-        <section
-          className="dossier-body space-y-4 text-base leading-7 text-[var(--color-text-primary)]
-            [&_a]:text-[var(--color-accent)] [&_a]:underline
-            [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-border-strong)] [&_blockquote]:pl-4 [&_blockquote]:italic
-            [&_code]:rounded [&_code]:bg-[var(--color-surface-2)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm
-            [&_h2]:mt-10 [&_h2]:font-display [&_h2]:text-2xl [&_h2]:tracking-tight
-            [&_h3]:mt-6 [&_h3]:font-display [&_h3]:text-xl [&_h3]:tracking-tight
-            [&_li]:my-1
-            [&_ol]:list-decimal [&_ol]:pl-6
-            [&_p]:my-3
-            [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--color-border-default)] [&_th]:p-2 [&_th]:text-left [&_td]:border [&_td]:border-[var(--color-border-default)] [&_td]:p-2
-            [&_ul]:list-disc [&_ul]:pl-6"
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{data.dossier_md}</ReactMarkdown>
+        <section className="dossier-body space-y-4 text-base leading-7 text-[var(--color-text-primary)]">
+          <DossierContent dossier_md={data.dossier_md} />
         </section>
       ) : (
         <DossierSkeleton status={data.status} progress={data.progress_pct} />

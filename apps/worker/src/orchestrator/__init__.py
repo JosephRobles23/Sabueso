@@ -1,6 +1,10 @@
 """Orquestador LangGraph de Sabueso (S-06)."""
 
-from .checkpointer import in_memory_checkpointer, open_postgres_checkpointer
+from .checkpointer import (
+    in_memory_checkpointer,
+    open_async_postgres_checkpointer,
+    open_postgres_checkpointer,
+)
 from .edges import fan_out
 from .graph import GraphDeps, InvestigatorCallable, build_graph
 from .state import (
@@ -24,5 +28,6 @@ __all__ = [
     "event_agent_for",
     "fan_out",
     "in_memory_checkpointer",
+    "open_async_postgres_checkpointer",
     "open_postgres_checkpointer",
 ]

@@ -9,9 +9,12 @@ import {
   Clock,
   Download,
   FileText,
+  Loader2,
   MoreHorizontal,
   Network,
+  RotateCcw,
   Share2,
+  Users,
   WifiOff,
 } from "lucide-react";
 import type {
@@ -35,7 +38,6 @@ import {
   MissionControl,
   OperativesFloor,
   SankeyView,
-  TimelineScrubber,
   TimelineView,
 } from "@/components/investigation";
 import {
@@ -46,6 +48,7 @@ import {
 } from "@/hooks/useInvestigation";
 import { useLocalStorageInvestigation } from "@/hooks/useLocalStorageInvestigation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { useDemoReplay } from "@/hooks/useDemoReplay";
 import { cn } from "@/lib/utils";
 import type {
   ActiveDelegation,
@@ -108,21 +111,20 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
   const searchParams = useSearchParams();
   const mode: InvestigationMode = searchParams?.get("mode") === "replay" ? "replay" : "live";
 
+  const [replayState, replayControls] = useDemoReplay(injectedState);
   const live = useLiveInvestigation(id, !injectedState, mode);
-  const state = injectedState ?? live.state;
+  const state = replayState ?? injectedState ?? live.state;
 
   const [drillTarget, setDrillTarget] = React.useState<InvestigatorCallsign | null>(null);
   const [scrubTime, setScrubTime] = React.useState<Date | null>(null);
   const [floorMode, setFloorMode] = useFloorMode();
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  const isLive = !injectedState && state.status === "running";
+  const isDemo = Boolean(injectedState);
+  const isLive = isDemo ? state.status === "running" : !injectedState && state.status === "running";
   const isStreamingDossier = state.status === "synthesizing";
   const isOffline = !injectedState && live.isOffline;
 
-  // When the user clicks an event in TimelineView, switch back to graph mode
-  // and align the scrubber to the claim's timestamp so the graph filters down
-  // to what was known at that point in time.
   const handleEventClick = React.useCallback(
     (claimId: string) => {
       const claim = state.claims.find((c) => c.id === claimId);
@@ -135,13 +137,6 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
     [state.claims, setFloorMode],
   );
 
-  // Double-click on a scrubber dot: snap scrubber to that timestamp. The
-  // graph already filters by `currentTime`, so the visible state matches.
-  const handleEventZoom = React.useCallback((_ev: InvestigationEvent) => {
-    // onTimeChange has already fired from TimelineScrubber (it sets the value
-    // before emitting onEventZoom). Nothing else to do here for now.
-  }, []);
-
   return (
     <main className="flex h-[calc(100dvh-64px)] min-h-0 w-full flex-col bg-[var(--color-canvas)]">
       <Header
@@ -149,17 +144,20 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
         targetName={state.target_name || labels.preparing}
         progress={state.progress}
         isLive={isLive || mode === "replay"}
+        isDemo={isDemo}
+        demoPhase={replayControls.phase}
+        onRestart={replayControls.restart}
+        dossierMd={state.dossier_md}
       />
 
       {isOffline && <OfflineBanner />}
       <PreviewModeBanner events={state.events} />
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-3 lg:px-6">
-        {/* Three-panel layout — desktop only. Mobile stacks vertically. */}
         <section className="flex min-h-0 flex-1">
           <div className="hidden h-full w-full lg:block">
             <PanelGroup direction="horizontal" className="h-full" autoSaveId={`shell-${id}`}>
-              <Panel defaultSize={28} minSize={20} className="min-h-0">
+              <Panel defaultSize={24} minSize={18} className="min-h-0">
                 <MissionControl
                   plan={state.plan}
                   agents={state.agents}
@@ -168,7 +166,7 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
                   className="h-full"
                 />
               </Panel>
-              <PanelResizeHandle className="w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--color-border-strong)]" />
+              <PanelResizeHandle className="w-1 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-[var(--color-border-strong)]" />
               <Panel defaultSize={44} minSize={30} className="min-h-0">
                 <FloorPanel
                   mode={floorMode}
@@ -182,11 +180,14 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
                   className="h-full"
                 />
               </Panel>
-              <PanelResizeHandle className="w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--color-border-strong)]" />
-              <Panel defaultSize={28} minSize={20} className="min-h-0">
-                <DossierPanel
+              <PanelResizeHandle className="w-1 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-[var(--color-border-strong)]" />
+              <Panel defaultSize={32} minSize={22} className="min-h-0">
+                <RightPanel
+                  agents={state.agents}
+                  activeDelegations={state.activeDelegations}
                   dossier_md={state.dossier_md}
                   streaming={isStreamingDossier}
+                  onOpenDrilldown={setDrillTarget}
                   className="h-full"
                 />
               </Panel>
@@ -215,26 +216,16 @@ export function InvestigationShell({ id, labels, state: injectedState }: Investi
               claims={state.claims}
               className="h-[480px] flex-none"
             />
-            <DossierPanel
+            <RightPanel
+              agents={state.agents}
+              activeDelegations={state.activeDelegations}
               dossier_md={state.dossier_md}
               streaming={isStreamingDossier}
+              onOpenDrilldown={setDrillTarget}
               className="h-[600px] flex-none"
             />
           </div>
         </section>
-
-        <OperativesFloor
-          agents={state.agents}
-          activeDelegations={state.activeDelegations}
-          onOpenDrilldown={setDrillTarget}
-        />
-
-        <TimelineScrubber
-          events={state.events}
-          value={scrubTime}
-          onTimeChange={setScrubTime}
-          onEventZoom={handleEventZoom}
-        />
       </div>
 
       <DrilldownPanel
@@ -265,6 +256,110 @@ function OfflineBanner() {
         </strong>{" "}
         — mostrando último estado guardado localmente. Reconectando…
       </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Right Panel — Operatives Floor (default) / Dossier tab switcher
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RightTab = "operatives" | "dossier";
+
+interface RightPanelProps {
+  agents: Record<string, AgentSnapshot>;
+  activeDelegations: ActiveDelegation[];
+  dossier_md: string;
+  streaming: boolean;
+  onOpenDrilldown?: (callsign: InvestigatorCallsign) => void;
+  className?: string;
+}
+
+function RightPanel({
+  agents,
+  activeDelegations,
+  dossier_md,
+  streaming,
+  onOpenDrilldown,
+  className,
+}: RightPanelProps) {
+  const [tab, setTab] = React.useState<RightTab>("operatives");
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 flex-col rounded-[var(--radius-lg)] border bg-[var(--color-surface)]",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-[var(--color-border-default)] px-4 py-2">
+        <div
+          role="tablist"
+          aria-label="Panel derecho"
+          className="inline-flex gap-1 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-2)] p-0.5"
+        >
+          {([
+            { id: "operatives" as RightTab, label: "Operatives Floor", icon: Users },
+            { id: "dossier" as RightTab, label: "Dossier", icon: FileText },
+          ]).map((t) => {
+            const active = t.id === tab;
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                type="button"
+                aria-selected={active}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+                  active
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="relative min-h-0 flex-1">
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "operatives"}
+          className={cn(
+            "absolute inset-0 overflow-y-auto",
+            tab === "operatives" ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          style={{ transition: "opacity 150ms ease-out" }}
+        >
+          <OperativesFloor
+            agents={agents}
+            activeDelegations={activeDelegations}
+            onOpenDrilldown={onOpenDrilldown}
+            className="h-full"
+          />
+        </div>
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "dossier"}
+          className={cn(
+            "absolute inset-0",
+            tab === "dossier" ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          style={{ transition: "opacity 150ms ease-out" }}
+        >
+          <DossierPanel
+            dossier_md={dossier_md}
+            streaming={streaming}
+            className="h-full border-0 rounded-none"
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -395,12 +490,48 @@ function Header({
   targetName,
   progress,
   isLive,
+  isDemo,
+  demoPhase,
+  onRestart,
+  dossierMd,
 }: {
   id: string;
   targetName: string;
   progress: number;
   isLive: boolean;
+  isDemo?: boolean;
+  demoPhase?: string;
+  onRestart?: () => void;
+  dossierMd?: string;
 }) {
+  const [pdfLoading, setPdfLoading] = React.useState(false);
+
+  const handleDownloadPdf = React.useCallback(async () => {
+    if (!dossierMd) return;
+    setPdfLoading(true);
+    try {
+      const { generateDossierPdf } = await import("@/lib/generatePdf");
+      await generateDossierPdf(targetName, dossierMd);
+    } catch {
+      // Fallback: open dossier page and trigger print
+      window.open(`/i/${id}/dossier`, "_blank");
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [dossierMd, targetName, id]);
+
+  const statusLabel = isDemo
+    ? demoPhase === "complete"
+      ? "completo"
+      : demoPhase === "streaming-dossier"
+        ? "redactando"
+        : "investigando"
+    : isLive
+      ? "live"
+      : "offline";
+
+  const statusActive = isLive || (isDemo && demoPhase !== "complete");
+
   return (
     <header
       role="banner"
@@ -422,10 +553,10 @@ function Header({
 
         <div className="flex flex-none items-center gap-3 text-xs">
           <span
-            aria-label={isLive ? "live" : "offline"}
+            aria-label={statusLabel}
             className={
               "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase " +
-              (isLive
+              (statusActive
                 ? "bg-[color-mix(in_srgb,var(--color-declared)_15%,transparent)] text-[var(--color-declared)]"
                 : "bg-[var(--color-surface-2)] text-[var(--color-text-muted)]")
             }
@@ -433,14 +564,20 @@ function Header({
             <span
               className={
                 "h-1.5 w-1.5 rounded-full " +
-                (isLive ? "animate-pulse-led bg-[var(--color-declared)]" : "bg-[var(--color-text-muted)]")
+                (statusActive ? "animate-pulse-led bg-[var(--color-declared)]" : "bg-[var(--color-text-muted)]")
               }
             />
-            {isLive ? "live" : "offline"}
+            {statusLabel}
           </span>
           <span className="font-mono tabular-nums text-[var(--color-text-secondary)]">
             {Math.round(progress)}%
           </span>
+          {isDemo && demoPhase === "complete" && onRestart && (
+            <Button variant="ghost" size="sm" aria-label="Reiniciar demo" onClick={onRestart}>
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:ml-1 sm:inline">Replay</span>
+            </Button>
+          )}
           <Button asChild variant="ghost" size="sm">
             <Link
               href={`/i/${id}/dossier`}
@@ -454,8 +591,19 @@ function Header({
           <Button variant="ghost" size="sm" aria-label="Compartir">
             <Share2 className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" aria-label="Descargar PDF">
-            <Download className="h-3.5 w-3.5" />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Descargar PDF"
+            onClick={handleDownloadPdf}
+            disabled={pdfLoading || !dossierMd}
+          >
+            {pdfLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:ml-1 sm:inline">PDF</span>
           </Button>
           <Button variant="ghost" size="icon" aria-label="Más opciones">
             <MoreHorizontal className="h-4 w-4" />

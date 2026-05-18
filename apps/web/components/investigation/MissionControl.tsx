@@ -354,7 +354,7 @@ function PistasKanban({
     <div
       role="list"
       aria-label="Pistas (kanban)"
-      className="grid h-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
+      className="grid h-full auto-rows-min grid-cols-2 gap-2"
     >
       {COLUMNS.map((col) => {
         const items = cards.filter((c) => c.bucket === col.id);
@@ -362,7 +362,7 @@ function PistasKanban({
           <div
             key={col.id}
             role="listitem"
-            className="flex min-h-[180px] flex-col gap-2 rounded-[var(--radius-md)] border bg-[var(--color-surface-2)] p-2"
+            className="flex flex-col gap-1.5 rounded-[var(--radius-md)] border bg-[var(--color-surface-2)] p-2"
           >
             <header className="flex items-center justify-between px-1 pb-1">
               <span

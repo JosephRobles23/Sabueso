@@ -1,29 +1,14 @@
 "use client";
 
-/**
- * DossierPanel — right-most panel. Renders the dossier markdown with two
- * inline custom tags processed *before* react-markdown sees them:
- *
- *   <conf v="0.84" />                → <ConfidenceBadge value={0.84} />
- *   <src url="https://…" type="jne"/> → <EvidenceChip sourceUrl=… sourceType="jne" />
- *
- * react-markdown by default strips raw HTML and `rehype-raw` is not in deps,
- * so we substitute these tags into invisible marker strings, render, then
- * walk the React children and replace the markers with the actual atoms.
- *
- * Live-stream: pass `streaming` to add a blinking caret at the end while
- * the synthesizer is still writing.
- */
-
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
 
 import { cn } from "@/lib/utils";
 
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { EvidenceChip, type EvidenceSourceType } from "./EvidenceChip";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 export interface DossierPanelProps {
   dossier_md: string;
@@ -34,7 +19,6 @@ export interface DossierPanelProps {
 const CONF_TAG_RE = /<conf\s+v="([\d.]+)"\s*\/>/g;
 const SRC_TAG_RE = /<src\s+url="([^"]+)"(?:\s+type="([^"]+)")?\s*\/>/g;
 
-// Use a no-print unicode separator that markdown won't touch.
 const SEP = "⁣";
 const CONF_MARK = `${SEP}CONF`;
 const SRC_MARK = `${SEP}SRC`;
@@ -107,6 +91,34 @@ function withMarkers<T extends { children?: React.ReactNode }>(
   return Wrapper;
 }
 
+function PreBlock({ children }: React.HTMLAttributes<HTMLPreElement> & { children?: React.ReactNode }) {
+  const child = React.Children.toArray(children)[0];
+  if (React.isValidElement(child)) {
+    const props = child.props as { className?: string; children?: React.ReactNode };
+    const match = /language-(\w+)/.exec(props.className || "");
+    if (match?.[1] === "mermaid") {
+      const code = String(props.children).replace(/\n$/, "");
+      return <MermaidDiagram chart={code} className="my-4" />;
+    }
+  }
+  return (
+    <pre className="my-4 overflow-x-auto rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] p-4 font-mono text-xs leading-relaxed text-[var(--color-text-primary)]">
+      {children}
+    </pre>
+  );
+}
+
+function InlineCode({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
+  return (
+    <code
+      className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 font-mono text-[0.85em] text-[var(--color-text-primary)]"
+      {...props}
+    >
+      {children}
+    </code>
+  );
+}
+
 export function DossierPanel({ dossier_md, streaming, className }: DossierPanelProps) {
   const processed = React.useMemo(() => preprocess(dossier_md), [dossier_md]);
 
@@ -135,28 +147,103 @@ export function DossierPanel({ dossier_md, streaming, className }: DossierPanelP
       <article
         aria-live={streaming ? "polite" : undefined}
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-5 py-4",
-          "prose prose-sm max-w-none",
-          "prose-headings:font-display prose-headings:tracking-tight prose-headings:text-[var(--color-text-primary)]",
-          "prose-p:text-[var(--color-text-primary)] prose-p:leading-relaxed",
-          "prose-strong:text-[var(--color-text-primary)]",
-          "prose-blockquote:border-l-[var(--color-accent)] prose-blockquote:text-[var(--color-text-secondary)]",
-          "prose-code:font-mono prose-code:text-[var(--color-text-primary)] prose-code:before:hidden prose-code:after:hidden",
-          "prose-li:text-[var(--color-text-primary)]",
+          "dossier-content min-h-0 flex-1 overflow-y-auto px-5 py-4",
+          "text-sm leading-relaxed text-[var(--color-text-primary)]",
         )}
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeSanitize]}
           components={{
-            p: withMarkers("p"),
-            li: withMarkers("li"),
-            td: withMarkers("td"),
-            h1: withMarkers("h1"),
-            h2: withMarkers("h2"),
-            h3: withMarkers("h3"),
-            h4: withMarkers("h4"),
-            blockquote: withMarkers("blockquote"),
+            h1: ({ children }) => (
+              <h1 className="mb-4 mt-6 font-display text-2xl tracking-tight text-[var(--color-text-primary)] first:mt-0">
+                {substitute(children)}
+              </h1>
+            ),
+            h2: ({ children }) => (
+              <h2 className="mb-3 mt-8 border-b border-[var(--color-border-default)] pb-2 font-display text-xl tracking-tight text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </h2>
+            ),
+            h3: ({ children }) => (
+              <h3 className="mb-2 mt-6 font-display text-lg tracking-tight text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </h3>
+            ),
+            h4: ({ children }) => (
+              <h4 className="mb-2 mt-4 font-display text-base font-semibold text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </h4>
+            ),
+            p: ({ children }) => (
+              <p className="my-3 leading-relaxed text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </p>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className="my-4 border-l-2 border-[var(--color-accent)] bg-[var(--color-surface-2)]/50 py-2 pl-4 pr-3 text-[var(--color-text-secondary)] italic">
+                {substitute(children)}
+              </blockquote>
+            ),
+            ul: ({ children }) => (
+              <ul className="my-3 list-disc space-y-1.5 pl-6 marker:text-[var(--color-text-muted)]">
+                {children}
+              </ul>
+            ),
+            ol: ({ children }) => (
+              <ol className="my-3 list-decimal space-y-1.5 pl-6 marker:text-[var(--color-text-muted)]">
+                {children}
+              </ol>
+            ),
+            li: ({ children }) => (
+              <li className="text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </li>
+            ),
+            strong: ({ children }) => (
+              <strong className="font-semibold text-[var(--color-text-primary)]">{children}</strong>
+            ),
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--color-accent)] underline decoration-[var(--color-accent)]/30 underline-offset-2 hover:decoration-[var(--color-accent)]"
+              >
+                {children}
+              </a>
+            ),
+            hr: () => (
+              <hr className="my-6 border-[var(--color-border-default)]" />
+            ),
+            table: ({ children }) => (
+              <div className="my-4 overflow-x-auto rounded-lg border border-[var(--color-border-default)]">
+                <table className="w-full border-collapse text-xs">
+                  {children}
+                </table>
+              </div>
+            ),
+            thead: ({ children }) => (
+              <thead className="bg-[var(--color-surface-2)]">
+                {children}
+              </thead>
+            ),
+            th: ({ children }) => (
+              <th className="border-b border-[var(--color-border-default)] px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="border-b border-[var(--color-border-default)]/50 px-3 py-2 text-[var(--color-text-primary)]">
+                {substitute(children)}
+              </td>
+            ),
+            tr: ({ children }) => (
+              <tr className="transition-colors hover:bg-[var(--color-surface-2)]/50">
+                {children}
+              </tr>
+            ),
+            pre: PreBlock,
+            code: InlineCode,
           }}
         >
           {processed}

@@ -104,6 +104,8 @@ def make_persist_node(deps: PersistDeps) -> _Node:
             )
             return _success_delta(investigation_id, claims, edges, cost)
 
+        target_entity_id = state.get("target_entity_id")
+
         try:
             async with _acquire(deps.pool) as conn:
                 async with conn.transaction():
@@ -117,13 +119,19 @@ def make_persist_node(deps: PersistDeps) -> _Node:
                         json.dumps(token_usage),
                         100,
                     )
+                    skipped = 0
                     for c in claims:
+                        entity_id = c.get("entity_id") or target_entity_id
+                        predicate = c.get("predicate")
+                        if not entity_id or not predicate or not c.get("source_id"):
+                            skipped += 1
+                            continue
                         await conn.execute(
                             INSERT_CLAIM_SQL,
                             c.get("id"),
                             investigation_id,
-                            c.get("entity_id"),
-                            c.get("predicate"),
+                            entity_id,
+                            predicate,
                             json.dumps(c.get("object_value") or {}),
                             c.get("source_id"),
                             c.get("source_extract"),
@@ -133,6 +141,8 @@ def make_persist_node(deps: PersistDeps) -> _Node:
                             bool(c.get("verified_by_jueza", False)),
                             c.get("verified_at"),
                         )
+                    if skipped:
+                        log.warning("persist.skipped_claims: %d claims missing required fields", skipped)
                     for e in edges:
                         await conn.execute(
                             INSERT_EDGE_SQL,

@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 # Modelos del protocolo MoA (C4 §G4)
 PROPOSERS: tuple[str, ...] = (
     "anthropic/claude-sonnet-4.6",
-    "moonshot/kimi-k2.6",
+    "anthropic/claude-sonnet-4.6",
     "openai/gpt-4o",
 )
 AGGREGATOR: str = "anthropic/claude-sonnet-4.6"

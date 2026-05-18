@@ -19,10 +19,7 @@ export async function Nav({ variant = "app" }: { variant?: "marketing" | "app" }
     <header className="sticky top-0 z-30 border-b border-[var(--color-border-default)] bg-[var(--color-canvas)]/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <Link href={variant === "marketing" ? "/" : "/app"} className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="inline-block h-7 w-7 rounded-[var(--radius-full)] bg-[var(--color-accent)]"
-          />
+          <span aria-hidden className="text-2xl leading-none">🐕‍🦺</span>
           <span className="font-display text-lg tracking-tight">{t("appName")}</span>
         </Link>
 

@@ -127,7 +127,7 @@ class ElContador(BaseInvestigator):
     callsign = "el-contador"
     role = "contracts"
     color = "violet-500"
-    model = "moonshot/kimi-k2.6"
+    model = "anthropic/claude-sonnet-4.6"
     strategy = Strategy.REWOO
     allowed_tools = [SEACE_TOOL]
     system_prompt_path = "contador"

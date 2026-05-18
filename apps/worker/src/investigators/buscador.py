@@ -57,7 +57,7 @@ class ElBuscador(BaseInvestigator):
     callsign = "el-buscador"
     role = "recon"
     color = "slate-400"
-    model = "moonshot/kimi-k2.6"
+    model = "anthropic/claude-sonnet-4.6"
     strategy = Strategy.REWOO
     allowed_tools = ["search_manolo", "find_dni_record", "find_ruc_record"]
     system_prompt_path = "buscador"

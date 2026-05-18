@@ -34,7 +34,7 @@ from .observability import configure_langsmith, configure_logging
 from .orchestrator import (
     GraphDeps,
     build_graph,
-    open_postgres_checkpointer,
+    open_async_postgres_checkpointer,
 )
 from .tools.registry import load_all_tools
 
@@ -143,7 +143,7 @@ async def run_async() -> int:
             persist_dry_run=False,
         )
 
-        with open_postgres_checkpointer(db_url) as checkpointer:
+        async with open_async_postgres_checkpointer(db_url) as checkpointer:
             graph = build_graph(deps, checkpointer=checkpointer)
 
             initial_state: dict[str, Any] = {

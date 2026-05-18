@@ -32,6 +32,9 @@ export type { InvestigationGraphProps } from "./InvestigationGraph";
 export { DossierPanel } from "./DossierPanel";
 export type { DossierPanelProps } from "./DossierPanel";
 
+export { MermaidDiagram } from "./MermaidDiagram";
+export type { MermaidDiagramProps } from "./MermaidDiagram";
+
 export { DrilldownPanel } from "./DrilldownPanel";
 export type { DrilldownPanelProps } from "./DrilldownPanel";
 

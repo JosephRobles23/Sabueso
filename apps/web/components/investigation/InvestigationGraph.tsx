@@ -1,28 +1,8 @@
 "use client";
 
-/**
- * InvestigationGraph — central panel.
- *
- * The S-12 spec asks for a cosmos.gl wrapper (`@cosmograph/react`) with a
- * fallback to `react-force-graph-2d`. Neither is installed in this worktree
- * (no GPU dep budget yet), so this implementation runs a small self-contained
- * SVG force simulation that matches the same visual contract:
- *
- *   - Node color from `entity.semantic` (declared / discovered / ambiguous /
- *     suspicious / conflict / verified).
- *   - Edge stroke width scales with `confidence`.
- *   - Mount uses a spring-style relaxation (skipped on prefers-reduced-motion).
- *   - Conflict nodes pulse red via `animate-conflict-pulse`.
- *   - Click → `onNodeClick(entity_id)`.
- *
- * Swap to cosmos.gl by replacing the `<svg>` simulation block with
- * `<Cosmograph nodes={…} links={…} />` — props are already shaped to fit.
- */
-
 import * as React from "react";
-import { Filter, X } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { GraphEdge, GraphEntity, GraphSemantic } from "@/lib/mockInvestigationState";
 import { cn } from "@/lib/utils";
@@ -31,13 +11,7 @@ export interface InvestigationGraphProps {
   entities: GraphEntity[];
   edges: GraphEdge[];
   onNodeClick?: (entityId: string) => void;
-  /** Optional date filter (start/end ISO). Edges outside the range are dimmed. */
   filterRange?: { start: string | null; end: string | null };
-  /**
-   * Optional upper-bound timestamp. Edges with `occurred_at > currentTime` are
-   * hidden. Used by the TimelineScrubber to animate the graph back through
-   * time without disturbing existing filter state.
-   */
   currentTime?: Date | null;
   className?: string;
 }
@@ -65,6 +39,19 @@ interface NodePos {
   y: number;
   vx: number;
   vy: number;
+  pinned?: boolean;
+}
+
+interface DragState {
+  entityId: string;
+  offsetX: number;
+  offsetY: number;
+}
+
+interface ViewTransform {
+  x: number;
+  y: number;
+  scale: number;
 }
 
 export function InvestigationGraph({
@@ -75,25 +62,15 @@ export function InvestigationGraph({
   className,
 }: InvestigationGraphProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const svgRef = React.useRef<SVGSVGElement | null>(null);
   const [size, setSize] = React.useState({ width: 600, height: 400 });
   const prefersReducedMotion = usePrefersReducedMotion();
-  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [selectedNode, setSelectedNode] = React.useState<string | null>(null);
+  const [hoveredNode, setHoveredNode] = React.useState<string | null>(null);
+  const dragRef = React.useRef<DragState | null>(null);
+  const [view, setView] = React.useState<ViewTransform>({ x: 0, y: 0, scale: 1 });
+  const panRef = React.useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
 
-  // Filters
-  const [redOnly, setRedOnly] = React.useState(false);
-  const [minWeight, setMinWeight] = React.useState(0);
-  const minDate = edges.reduce<string | null>(
-    (acc, e) => (e.occurred_at && (!acc || e.occurred_at < acc) ? e.occurred_at : acc),
-    null,
-  );
-  const maxDate = edges.reduce<string | null>(
-    (acc, e) => (e.occurred_at && (!acc || e.occurred_at > acc) ? e.occurred_at : acc),
-    null,
-  );
-  const [fromDate, setFromDate] = React.useState<string | null>(minDate);
-  const [toDate, setToDate] = React.useState<string | null>(maxDate);
-
-  // Container size
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -105,18 +82,14 @@ export function InvestigationGraph({
     return () => ro.disconnect();
   }, []);
 
-  // Positions — one entry per entity id. Initialized on a circle around center
-  // so the first frame is already coherent and the simulation has gradient to
-  // descend.
   const positionsRef = React.useRef<Map<string, NodePos>>(new Map());
-  const [, forceRender] = React.useReducer((x) => x + 1, 0);
+  const [, forceRender] = React.useReducer((x: number) => x + 1, 0);
 
-  // Initialize / re-seed positions whenever the entity set changes.
   React.useLayoutEffect(() => {
     const positions = new Map<string, NodePos>();
     const cx = size.width / 2;
     const cy = size.height / 2;
-    const radius = Math.min(size.width, size.height) * 0.35;
+    const radius = Math.min(size.width, size.height) * 0.32;
     entities.forEach((e, i) => {
       const existing = positionsRef.current.get(e.id);
       if (existing) {
@@ -127,7 +100,7 @@ export function InvestigationGraph({
         positions.set(e.id, { x: e.x, y: e.y, vx: 0, vy: 0 });
         return;
       }
-      const angle = (i / Math.max(1, entities.length)) * Math.PI * 2;
+      const angle = (i / Math.max(1, entities.length)) * Math.PI * 2 - Math.PI / 2;
       positions.set(e.id, {
         x: cx + Math.cos(angle) * radius,
         y: cy + Math.sin(angle) * radius,
@@ -139,232 +112,325 @@ export function InvestigationGraph({
     forceRender();
   }, [entities, size.width, size.height]);
 
-  // Force simulation — Hooke springs along edges, mild Coulomb repulsion
-  // between all pairs, centering force, velocity damping. Runs ~120 iterations
-  // for the spring mount; instant settle when reduced-motion is on.
+  // Force simulation
+  const simulationRunning = React.useRef(true);
   React.useEffect(() => {
     const positions = positionsRef.current;
     if (positions.size === 0) return;
-
-    const iterations = prefersReducedMotion ? 220 : 220;
-    const renderEvery = prefersReducedMotion ? iterations : 4;
-
+    simulationRunning.current = true;
     let raf = 0;
-    let i = 0;
-
+    let frame = 0;
     const step = () => {
+      if (!simulationRunning.current) return;
       tickForces(positions, entities, edges, size);
-      i++;
-      if (i % renderEvery === 0) forceRender();
-      if (i < iterations) {
-        if (prefersReducedMotion) {
-          step();
-        } else {
-          raf = requestAnimationFrame(step);
-        }
+      frame++;
+      if (frame % 3 === 0) forceRender();
+      if (frame < 300) {
+        raf = requestAnimationFrame(step);
       } else {
         forceRender();
       }
     };
-
     if (prefersReducedMotion) {
-      step();
+      for (let i = 0; i < 300; i++) tickForces(positions, entities, edges, size);
+      forceRender();
     } else {
       raf = requestAnimationFrame(step);
     }
-    return () => cancelAnimationFrame(raf);
-    // intentionally exclude entities/edges/size — re-running only on prefers
-    // toggle keeps positions stable between filter clicks.
+    return () => {
+      simulationRunning.current = false;
+      cancelAnimationFrame(raf);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, entities, edges, size]);
 
-  // Filter view (does not affect simulation — keeps layout stable while user
-  // toggles filters).
+  // Drag handlers
+  const handleNodeDragStart = React.useCallback((entityId: string, clientX: number, clientY: number) => {
+    const pos = positionsRef.current.get(entityId);
+    if (!pos || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = (clientX - rect.left - view.x) / view.scale;
+    const svgY = (clientY - rect.top - view.y) / view.scale;
+    dragRef.current = { entityId, offsetX: pos.x - svgX, offsetY: pos.y - svgY };
+    pos.pinned = true;
+  }, [view]);
+
+  const handleNodeDragMove = React.useCallback((clientX: number, clientY: number) => {
+    const drag = dragRef.current;
+    if (!drag || !svgRef.current) return;
+    const pos = positionsRef.current.get(drag.entityId);
+    if (!pos) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = (clientX - rect.left - view.x) / view.scale;
+    const svgY = (clientY - rect.top - view.y) / view.scale;
+    pos.x = svgX + drag.offsetX;
+    pos.y = svgY + drag.offsetY;
+    pos.vx = 0;
+    pos.vy = 0;
+    forceRender();
+  }, [view, forceRender]);
+
+  const handleNodeDragEnd = React.useCallback(() => {
+    const drag = dragRef.current;
+    if (drag) {
+      const pos = positionsRef.current.get(drag.entityId);
+      if (pos) pos.pinned = false;
+    }
+    dragRef.current = null;
+  }, []);
+
+  // Pan handlers
+  const handleSvgPointerDown = React.useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (dragRef.current) return;
+    if ((e.target as SVGElement).closest("g[data-node]")) return;
+    panRef.current = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
+    (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+  }, [view]);
+
+  const handleSvgPointerMove = React.useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (dragRef.current) {
+      handleNodeDragMove(e.clientX, e.clientY);
+      return;
+    }
+    const pan = panRef.current;
+    if (!pan) return;
+    setView((v) => ({ ...v, x: pan.viewX + (e.clientX - pan.startX), y: pan.viewY + (e.clientY - pan.startY) }));
+  }, [handleNodeDragMove]);
+
+  const handleSvgPointerUp = React.useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (dragRef.current) { handleNodeDragEnd(); return; }
+    panRef.current = null;
+    (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId);
+  }, [handleNodeDragEnd]);
+
+  const handleWheel = React.useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    setView((v) => {
+      const newScale = Math.min(3, Math.max(0.25, v.scale * delta));
+      const ratio = newScale / v.scale;
+      return { scale: newScale, x: mx - (mx - v.x) * ratio, y: my - (my - v.y) * ratio };
+    });
+  }, []);
+
+  const resetView = React.useCallback(() => {
+    setView({ x: 0, y: 0, scale: 1 });
+  }, []);
+
+  const zoomIn = React.useCallback(() => {
+    setView((v) => {
+      const newScale = Math.min(3, v.scale * 1.25);
+      const cx = size.width / 2;
+      const cy = size.height / 2;
+      const ratio = newScale / v.scale;
+      return { scale: newScale, x: cx - (cx - v.x) * ratio, y: cy - (cy - v.y) * ratio };
+    });
+  }, [size]);
+
+  const zoomOut = React.useCallback(() => {
+    setView((v) => {
+      const newScale = Math.max(0.25, v.scale * 0.8);
+      const cx = size.width / 2;
+      const cy = size.height / 2;
+      const ratio = newScale / v.scale;
+      return { scale: newScale, x: cx - (cx - v.x) * ratio, y: cy - (cy - v.y) * ratio };
+    });
+  }, [size]);
+
+  // Filter edges by time
   const currentTimeIso = currentTime ? currentTime.toISOString() : null;
   const visibleEdges = edges.filter((e) => {
-    if (redOnly && !["suspicious", "conflict"].includes(e.semantic)) return false;
-    if (e.weight < minWeight) return false;
-    if (fromDate && e.occurred_at && e.occurred_at < fromDate) return false;
-    if (toDate && e.occurred_at && e.occurred_at > toDate) return false;
     if (currentTimeIso && e.occurred_at && e.occurred_at > currentTimeIso) return false;
     return true;
   });
+
+  const focusId = hoveredNode ?? selectedNode;
 
   return (
     <section
       aria-label="Mapa de relaciones"
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border bg-[var(--color-canvas)]",
+        "relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-canvas)]",
         className,
       )}
     >
-      <header className="flex items-center justify-between border-b border-[var(--color-border-default)] bg-[var(--color-surface)] px-4 py-3">
-        <h2 className="font-display text-lg">Mapa de relaciones</h2>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-            {entities.length} nodos · {visibleEdges.length}/{edges.length} aristas
+      {/* Minimal top bar */}
+      <header className="flex items-center justify-between border-b border-[var(--color-border-default)] bg-[var(--color-surface)]/60 px-3 py-2 backdrop-blur-sm">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
+          {entities.length} nodos · {visibleEdges.length} aristas
+        </span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={zoomOut} className="rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]" aria-label="Alejar">
+            <ZoomOut className="h-3.5 w-3.5" />
+          </button>
+          <span className="min-w-[36px] text-center font-mono text-[9px] text-[var(--color-text-muted)]">
+            {Math.round(view.scale * 100)}%
           </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setFiltersOpen((v) => !v)}
-            aria-pressed={filtersOpen}
-            aria-label="Mostrar filtros"
-          >
-            <Filter className="h-3.5 w-3.5" aria-hidden />
-            <span className="ml-1">Filtros</span>
-          </Button>
+          <button type="button" onClick={zoomIn} className="rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]" aria-label="Acercar">
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={resetView} className="rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]" aria-label="Restablecer vista">
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </header>
 
       <div ref={containerRef} className="relative min-h-0 flex-1">
         <svg
+          ref={svgRef}
           width={size.width}
           height={size.height}
           viewBox={`0 0 ${size.width} ${size.height}`}
-          className="block h-full w-full"
+          className={cn("block h-full w-full", dragRef.current ? "cursor-grabbing" : panRef.current ? "cursor-grabbing" : "cursor-grab")}
           role="img"
           aria-label="Grafo de entidades cruzadas"
+          onPointerDown={handleSvgPointerDown}
+          onPointerMove={handleSvgPointerMove}
+          onPointerUp={handleSvgPointerUp}
+          onWheel={handleWheel}
+          style={{ touchAction: "none" }}
         >
-          {/* Edges */}
-          <g>
-            {visibleEdges.map((edge) => {
-              const a = positionsRef.current.get(edge.from);
-              const b = positionsRef.current.get(edge.to);
-              if (!a || !b) return null;
-              const color = SEMANTIC_COLOR[edge.semantic];
-              const width = 0.5 + edge.confidence * 3;
-              return (
-                <line
-                  key={edge.id}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke={color}
-                  strokeWidth={width}
-                  strokeOpacity={0.55}
-                  className={edge.semantic === "conflict" ? "animate-conflict-pulse" : undefined}
-                />
-              );
-            })}
-          </g>
+          <defs>
+            {/* Glow filter for highlighted edges */}
+            <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            {/* Node glow */}
+            <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            {/* Dot pattern background */}
+            <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <circle cx="10" cy="10" r="0.6" fill="var(--color-border-default)" opacity="0.4" />
+            </pattern>
+          </defs>
 
-          {/* Nodes */}
-          <g>
-            {entities.map((e) => {
-              const p = positionsRef.current.get(e.id);
-              if (!p) return null;
-              const color = SEMANTIC_COLOR[e.semantic];
-              const r = e.type === "person" ? 11 : e.type === "company" ? 9 : 8;
-              return (
-                <NodeGlyph
-                  key={e.id}
-                  entity={e}
-                  x={p.x}
-                  y={p.y}
-                  r={r}
-                  color={color}
-                  onClick={onNodeClick}
-                />
-              );
-            })}
+          {/* Dot grid background */}
+          <rect width={size.width} height={size.height} fill="url(#dot-grid)" />
+
+          <g transform={`translate(${view.x},${view.y}) scale(${view.scale})`}>
+            {/* Edges — curved bezier */}
+            <g>
+              {visibleEdges.map((edge) => {
+                const a = positionsRef.current.get(edge.from);
+                const b = positionsRef.current.get(edge.to);
+                if (!a || !b) return null;
+                const color = SEMANTIC_COLOR[edge.semantic];
+                const width = 0.8 + edge.confidence * 2;
+                const isHighlighted = focusId === edge.from || focusId === edge.to;
+                const dimmed = focusId && !isHighlighted;
+
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const curvature = Math.min(40, dist * 0.15);
+                const nx = -dy / (dist || 1);
+                const ny = dx / (dist || 1);
+                const mx = (a.x + b.x) / 2 + nx * curvature;
+                const my = (a.y + b.y) / 2 + ny * curvature;
+                const path = `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`;
+
+                return (
+                  <g key={edge.id}>
+                    {isHighlighted && (
+                      <path
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={width + 4}
+                        strokeOpacity={0.12}
+                        filter="url(#edge-glow)"
+                      />
+                    )}
+                    <path
+                      d={path}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={isHighlighted ? width + 0.8 : width}
+                      strokeOpacity={dimmed ? 0.08 : isHighlighted ? 0.8 : 0.35}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-opacity 200ms ease, stroke-width 200ms ease" }}
+                    />
+                    {isHighlighted && (
+                      <text x={mx} y={my - 8} textAnchor="middle" className="pointer-events-none font-mono" fontSize={8} fill="var(--color-text-secondary)" opacity={0.8}>
+                        {edge.type}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+
+            {/* Nodes */}
+            <g>
+              {entities.map((entity) => {
+                const p = positionsRef.current.get(entity.id);
+                if (!p) return null;
+                const color = SEMANTIC_COLOR[entity.semantic];
+                const r = entity.type === "person" ? 10 : entity.type === "company" ? 8 : 7;
+                const isConnected = focusId
+                  ? focusId === entity.id || edges.some(
+                      (ed) => (ed.from === focusId && ed.to === entity.id) || (ed.to === focusId && ed.from === entity.id),
+                    )
+                  : true;
+                const dimmed = !!focusId && !isConnected;
+                const isSelected = selectedNode === entity.id;
+
+                return (
+                  <NodeGlyph
+                    key={entity.id}
+                    entity={entity}
+                    x={p.x}
+                    y={p.y}
+                    r={r}
+                    color={color}
+                    dimmed={dimmed}
+                    selected={isSelected}
+                    onClick={(id) => {
+                      setSelectedNode((prev) => (prev === id ? null : id));
+                      onNodeClick?.(id);
+                    }}
+                    onHover={setHoveredNode}
+                    onDragStart={handleNodeDragStart}
+                  />
+                );
+              })}
+            </g>
           </g>
         </svg>
 
-        {/* Legend */}
-        <ul className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-1.5 text-[10px]">
+        {/* Legend — bottom left */}
+        <div className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-1">
           {(Object.keys(SEMANTIC_COLOR) as GraphSemantic[]).map((s) => (
-            <li
+            <span
               key={s}
-              className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface)]/85 px-2 py-0.5 font-mono backdrop-blur"
+              className="inline-flex items-center gap-1 rounded-full bg-[var(--color-canvas)]/80 px-2 py-0.5 font-mono text-[9px] backdrop-blur-sm"
               style={{ color: SEMANTIC_COLOR[s] }}
             >
-              <span
-                aria-hidden
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: SEMANTIC_COLOR[s] }}
-              />
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: SEMANTIC_COLOR[s] }} />
               {SEMANTIC_LABEL[s]}
-            </li>
+            </span>
           ))}
-        </ul>
-
-        {/* Filters drawer */}
-        {filtersOpen ? (
-          <aside
-            aria-label="Filtros del grafo"
-            className="absolute top-2 right-2 w-64 rounded-[var(--radius-md)] border bg-[var(--color-surface)] p-3 text-xs shadow-lg"
-          >
-            <header className="mb-2 flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                Filtros
-              </span>
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(false)}
-                className="rounded-sm p-1 hover:bg-[var(--color-surface-2)]"
-                aria-label="Cerrar filtros"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </header>
-
-            <label className="mb-3 flex cursor-pointer items-center justify-between gap-2">
-              <span>Solo aristas rojas</span>
-              <input
-                type="checkbox"
-                checked={redOnly}
-                onChange={(e) => setRedOnly(e.target.checked)}
-                aria-label="Mostrar solo aristas rojas"
-              />
-            </label>
-
-            <label className="mb-3 block">
-              <span className="mb-1 block font-mono text-[10px] uppercase text-[var(--color-text-muted)]">
-                Peso mínimo: {minWeight.toFixed(2)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={2}
-                step={0.1}
-                value={minWeight}
-                onChange={(e) => setMinWeight(Number(e.target.value))}
-                className="w-full"
-                aria-label="Peso mínimo"
-              />
-            </label>
-
-            <label className="mb-2 block">
-              <span className="mb-1 block font-mono text-[10px] uppercase text-[var(--color-text-muted)]">
-                Desde
-              </span>
-              <input
-                type="date"
-                value={fromDate?.slice(0, 10) ?? ""}
-                onChange={(e) => setFromDate(e.target.value || null)}
-                className="w-full rounded-[var(--radius-sm)] border bg-[var(--color-surface-2)] px-2 py-1"
-              />
-            </label>
-            <label className="mb-2 block">
-              <span className="mb-1 block font-mono text-[10px] uppercase text-[var(--color-text-muted)]">
-                Hasta
-              </span>
-              <input
-                type="date"
-                value={toDate?.slice(0, 10) ?? ""}
-                onChange={(e) => setToDate(e.target.value || null)}
-                className="w-full rounded-[var(--radius-sm)] border bg-[var(--color-surface-2)] px-2 py-1"
-              />
-            </label>
-          </aside>
-        ) : null}
+        </div>
       </div>
     </section>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Node
+// ─────────────────────────────────────────────────────────────────────────────
 
 function NodeGlyph({
   entity,
@@ -372,51 +438,82 @@ function NodeGlyph({
   y,
   r,
   color,
+  dimmed,
+  selected,
   onClick,
+  onHover,
+  onDragStart,
 }: {
   entity: GraphEntity;
   x: number;
   y: number;
   r: number;
   color: string;
+  dimmed: boolean;
+  selected: boolean;
   onClick?: (id: string) => void;
+  onHover?: (id: string | null) => void;
+  onDragStart?: (id: string, clientX: number, clientY: number) => void;
 }) {
+  const isDragging = React.useRef(false);
+  const startPos = React.useRef<{ x: number; y: number } | null>(null);
+
   return (
     <g
+      data-node
       transform={`translate(${x},${y})`}
       tabIndex={0}
       role="button"
       aria-label={`${entity.name} — ${entity.type}`}
-      className={cn(
-        "cursor-pointer outline-none focus-visible:[outline:2px_solid_var(--color-accent)]",
-      )}
-      onClick={() => onClick?.(entity.id)}
-      onKeyDown={(ev) => {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          onClick?.(entity.id);
+      className="cursor-grab outline-none active:cursor-grabbing"
+      style={{ opacity: dimmed ? 0.12 : 1, transition: "opacity 200ms ease" }}
+      onPointerDown={(ev) => {
+        ev.stopPropagation();
+        startPos.current = { x: ev.clientX, y: ev.clientY };
+        isDragging.current = false;
+        onDragStart?.(entity.id, ev.clientX, ev.clientY);
+        (ev.currentTarget as SVGGElement).setPointerCapture(ev.pointerId);
+      }}
+      onPointerUp={(ev) => {
+        (ev.currentTarget as SVGGElement).releasePointerCapture(ev.pointerId);
+        if (!isDragging.current) onClick?.(entity.id);
+        isDragging.current = false;
+        startPos.current = null;
+      }}
+      onPointerMove={(ev) => {
+        if (startPos.current) {
+          const dx = ev.clientX - startPos.current.x;
+          const dy = ev.clientY - startPos.current.y;
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging.current = true;
         }
       }}
+      onPointerEnter={() => onHover?.(entity.id)}
+      onPointerLeave={() => onHover?.(null)}
+      onKeyDown={(ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onClick?.(entity.id); }
+      }}
     >
-      <circle
-        r={r + 4}
-        fill={color}
-        opacity={0.15}
-        className={entity.semantic === "conflict" ? "animate-conflict-pulse" : undefined}
-      />
-      <circle
-        r={r}
-        fill={color}
-        stroke="var(--color-canvas)"
-        strokeWidth={1.5}
-      />
+      {/* Outer glow */}
+      <circle r={r + 8} fill={color} opacity={selected ? 0.2 : 0.06} filter="url(#node-glow)" />
+      {/* Selection ring */}
+      {selected && (
+        <circle r={r + 5} fill="none" stroke={color} strokeWidth={1} strokeDasharray="3 2" opacity={0.5} />
+      )}
+      {/* Core */}
+      <circle r={r} fill={color} opacity={0.9} />
+      <circle r={r} fill="none" stroke={color} strokeWidth={1.5} opacity={0.4} />
+      {/* Inner highlight */}
+      <circle r={r * 0.4} fill="white" opacity={0.15} cy={-r * 0.2} />
+      {/* Label */}
       <text
-        y={r + 12}
+        y={r + 13}
         textAnchor="middle"
-        className="pointer-events-none fill-[var(--color-text-primary)] font-mono"
-        fontSize={10}
+        className="pointer-events-none font-mono"
+        fontSize={9}
+        fill="var(--color-text-primary)"
+        opacity={0.85}
       >
-        {truncate(entity.name, 26)}
+        {truncate(entity.name, 22)}
       </text>
     </g>
   );
@@ -427,7 +524,7 @@ function truncate(s: string, n: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Force simulation step
+// Force simulation
 // ─────────────────────────────────────────────────────────────────────────────
 
 function tickForces(
@@ -440,8 +537,7 @@ function tickForces(
   const cy = size.height / 2;
   const ids = entities.map((e) => e.id);
 
-  // Coulomb-ish repulsion between pairs.
-  const REPULSION = 1800;
+  const REPULSION = 2200;
   for (let i = 0; i < ids.length; i++) {
     const a = positions.get(ids[i]);
     if (!a) continue;
@@ -450,7 +546,7 @@ function tickForces(
       if (!b) continue;
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      const distSq = Math.max(80, dx * dx + dy * dy);
+      const distSq = Math.max(100, dx * dx + dy * dy);
       const force = REPULSION / distSq;
       const dist = Math.sqrt(distSq);
       const ux = dx / dist;
@@ -462,7 +558,6 @@ function tickForces(
     }
   }
 
-  // Hooke springs along edges (rest length depends on edge weight).
   for (const edge of edges) {
     const a = positions.get(edge.from);
     const b = positions.get(edge.to);
@@ -470,8 +565,8 @@ function tickForces(
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const rest = 110 + 40 / Math.max(0.2, edge.weight);
-    const k = 0.03 * (0.5 + edge.confidence);
+    const rest = 120 + 50 / Math.max(0.2, edge.weight);
+    const k = 0.025 * (0.5 + edge.confidence);
     const f = (dist - rest) * k;
     const ux = dx / dist;
     const uy = dy / dist;
@@ -481,8 +576,7 @@ function tickForces(
     b.vy -= uy * f;
   }
 
-  // Centering.
-  const CENTER_FORCE = 0.012;
+  const CENTER_FORCE = 0.01;
   for (const id of ids) {
     const p = positions.get(id);
     if (!p) continue;
@@ -490,12 +584,12 @@ function tickForces(
     p.vy += (cy - p.y) * CENTER_FORCE;
   }
 
-  // Damping + integrate.
-  const DAMPING = 0.78;
-  const padding = 24;
+  const DAMPING = 0.8;
+  const padding = 30;
   for (const id of ids) {
     const p = positions.get(id);
     if (!p) continue;
+    if (p.pinned) { p.vx = 0; p.vy = 0; continue; }
     p.vx *= DAMPING;
     p.vy *= DAMPING;
     p.x += p.vx;

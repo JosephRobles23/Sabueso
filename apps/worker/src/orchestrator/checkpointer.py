@@ -19,8 +19,8 @@ satisface el mismo protocolo y cuenta checkpoints por ``thread_id`` vía
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -49,6 +49,27 @@ def open_postgres_checkpointer(
     with PostgresSaver.from_conn_string(conn) as saver:
         if setup:
             saver.setup()
+        yield saver
+
+
+@asynccontextmanager
+async def open_async_postgres_checkpointer(
+    conn_string: str | None = None,
+    *,
+    setup: bool = True,
+) -> AsyncIterator[Any]:
+    """Async version: yields an AsyncPostgresSaver for use with ainvoke."""
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: PLC0415
+
+    conn = conn_string or os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
+    if not conn:
+        raise RuntimeError(
+            "open_async_postgres_checkpointer requires SUPABASE_DB_URL or DATABASE_URL"
+        )
+
+    async with AsyncPostgresSaver.from_conn_string(conn) as saver:
+        if setup:
+            await saver.setup()
         yield saver
 
 

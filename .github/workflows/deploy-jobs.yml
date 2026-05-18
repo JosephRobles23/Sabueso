@@ -75,10 +75,9 @@ jobs:
             cpu: "2"
             timeout: "3600"
             secrets: >-
-              SUPABASE_DB_URL=supabase-db-url:latest,
-              OPENROUTER_API_KEY=openrouter-api-key:latest,
-              ANTHROPIC_API_KEY=anthropic-api-key:latest,
-              LANGCHAIN_API_KEY=langchain-api-key:latest
+              SUPABASE_DB_URL=sabueso-supabase-db-url:latest,
+              OPENROUTER_API_KEY=sabueso-openrouter-api-key:latest,
+              LANGCHAIN_API_KEY=sabueso-langchain-api-key:latest
           - app: pipeline
             path: apps/pipeline
             image_name: sabueso-pipeline
